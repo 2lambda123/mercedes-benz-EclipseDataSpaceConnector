@@ -32,5 +32,3 @@ dependencies {
     testImplementation(project(":core:control-plane:control-plane-core"))
     testImplementation(testFixtures(project(":extensions:common:sql:sql-core")))
 }
-
-

@@ -24,5 +24,3 @@ dependencies {
     testImplementation(project(":core:common:junit"))
     testImplementation(project(":core:control-plane:control-plane-core"))
 }
-
-

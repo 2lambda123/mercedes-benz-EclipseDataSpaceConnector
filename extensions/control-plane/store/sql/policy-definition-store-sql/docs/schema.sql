@@ -39,4 +39,3 @@ COMMENT ON COLUMN edc_policydefinitions.extensible_properties IS 'Java Map<Strin
 COMMENT ON COLUMN edc_policydefinitions.policy_type IS 'Java PolicyType serialized as JSON';
 
 CREATE UNIQUE INDEX IF NOT EXISTS edc_policydefinitions_id_uindex ON edc_policydefinitions (policy_id);
-
