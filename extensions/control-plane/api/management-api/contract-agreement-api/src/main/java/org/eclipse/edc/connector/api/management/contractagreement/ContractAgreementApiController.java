@@ -8,11 +8,16 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.connector.api.management.contractagreement;
+
+import static jakarta.json.stream.JsonCollectors.toJsonArray;
+import static org.eclipse.edc.spi.query.QuerySpec.EDC_QUERY_SPEC_TYPE;
+import static org.eclipse.edc.web.spi.exception.ServiceResultHandler.exceptionMapper;
 
 import jakarta.json.JsonArray;
 import jakarta.json.JsonObject;
@@ -22,6 +27,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import java.util.Optional;
 import org.eclipse.edc.connector.contract.spi.types.offer.ContractDefinition;
 import org.eclipse.edc.connector.spi.contractagreement.ContractAgreementService;
 import org.eclipse.edc.spi.EdcException;
@@ -35,70 +41,76 @@ import org.eclipse.edc.web.spi.exception.InvalidRequestException;
 import org.eclipse.edc.web.spi.exception.ObjectNotFoundException;
 import org.eclipse.edc.web.spi.exception.ValidationFailureException;
 
-import java.util.Optional;
-
-import static jakarta.json.stream.JsonCollectors.toJsonArray;
-import static org.eclipse.edc.spi.query.QuerySpec.EDC_QUERY_SPEC_TYPE;
-import static org.eclipse.edc.web.spi.exception.ServiceResultHandler.exceptionMapper;
-
 @Produces({MediaType.APPLICATION_JSON})
 @Path("/v2/contractagreements")
 public class ContractAgreementApiController implements ContractAgreementApi {
-    private final ContractAgreementService service;
-    private final TypeTransformerRegistry transformerRegistry;
-    private final Monitor monitor;
-    private final JsonObjectValidatorRegistry validatorRegistry;
+  private final ContractAgreementService service;
+  private final TypeTransformerRegistry transformerRegistry;
+  private final Monitor monitor;
+  private final JsonObjectValidatorRegistry validatorRegistry;
 
-    public ContractAgreementApiController(ContractAgreementService service, TypeTransformerRegistry transformerRegistry,
-                                          Monitor monitor, JsonObjectValidatorRegistry validatorRegistry) {
-        this.service = service;
-        this.transformerRegistry = transformerRegistry;
-        this.monitor = monitor;
-        this.validatorRegistry = validatorRegistry;
+  public ContractAgreementApiController(
+      ContractAgreementService service,
+      TypeTransformerRegistry transformerRegistry, Monitor monitor,
+      JsonObjectValidatorRegistry validatorRegistry) {
+    this.service = service;
+    this.transformerRegistry = transformerRegistry;
+    this.monitor = monitor;
+    this.validatorRegistry = validatorRegistry;
+  }
+
+  @POST
+  @Path("/request")
+  @Override
+  public JsonArray queryAllAgreements(JsonObject querySpecJson) {
+    QuerySpec querySpec;
+    if (querySpecJson == null) {
+      querySpec = QuerySpec.Builder.newInstance().build();
+    } else {
+      validatorRegistry.validate(EDC_QUERY_SPEC_TYPE, querySpecJson)
+          .orElseThrow(ValidationFailureException::new);
+
+      querySpec = transformerRegistry.transform(querySpecJson, QuerySpec.class)
+                      .orElseThrow(InvalidRequestException::new);
     }
 
-    @POST
-    @Path("/request")
-    @Override
-    public JsonArray queryAllAgreements(JsonObject querySpecJson) {
-        QuerySpec querySpec;
-        if (querySpecJson == null) {
-            querySpec = QuerySpec.Builder.newInstance().build();
-        } else {
-            validatorRegistry.validate(EDC_QUERY_SPEC_TYPE, querySpecJson).orElseThrow(ValidationFailureException::new);
+    return service.search(querySpec)
+        .orElseThrow(exceptionMapper(ContractDefinition.class, null))
+        .stream()
+        .map(it -> transformerRegistry.transform(it, JsonObject.class))
+        .peek(r -> r.onFailure(f -> monitor.warning(f.getFailureDetail())))
+        .filter(Result::succeeded)
+        .map(Result::getContent)
+        .collect(toJsonArray());
+  }
 
-            querySpec = transformerRegistry.transform(querySpecJson, QuerySpec.class)
-                    .orElseThrow(InvalidRequestException::new);
-        }
+  @GET
+  @Path("{id}")
+  @Override
+  public JsonObject getAgreementById(@PathParam("id") String id) {
+    return Optional.of(id)
+        .map(service::findById)
+        .map(
+            it
+            -> transformerRegistry.transform(it, JsonObject.class)
+                   .orElseThrow(
+                       failure -> new EdcException(failure.getFailureDetail())))
+        .orElseThrow(
+            () -> new ObjectNotFoundException(ContractAgreement.class, id));
+  }
 
-        return service.search(querySpec).orElseThrow(exceptionMapper(ContractDefinition.class, null)).stream()
-                .map(it -> transformerRegistry.transform(it, JsonObject.class))
-                .peek(r -> r.onFailure(f -> monitor.warning(f.getFailureDetail())))
-                .filter(Result::succeeded)
-                .map(Result::getContent)
-                .collect(toJsonArray());
-    }
-
-    @GET
-    @Path("{id}")
-    @Override
-    public JsonObject getAgreementById(@PathParam("id") String id) {
-        return Optional.of(id)
-                .map(service::findById)
-                .map(it -> transformerRegistry.transform(it, JsonObject.class)
-                        .orElseThrow(failure -> new EdcException(failure.getFailureDetail())))
-                .orElseThrow(() -> new ObjectNotFoundException(ContractAgreement.class, id));
-    }
-
-    @GET
-    @Path("{id}/negotiation")
-    @Override
-    public JsonObject getNegotiationByAgreementId(@PathParam("id") String id) {
-        return Optional.of(id)
-                .map(service::findNegotiation)
-                .map(it -> transformerRegistry.transform(it, JsonObject.class)
-                        .orElseThrow(failure -> new EdcException(failure.getFailureDetail())))
-                .orElseThrow(() -> new ObjectNotFoundException(ContractAgreement.class, id));
-    }
-
+  @GET
+  @Path("{id}/negotiation")
+  @Override
+  public JsonObject getNegotiationByAgreementId(@PathParam("id") String id) {
+    return Optional.of(id)
+        .map(service::findNegotiation)
+        .map(
+            it
+            -> transformerRegistry.transform(it, JsonObject.class)
+                   .orElseThrow(
+                       failure -> new EdcException(failure.getFailureDetail())))
+        .orElseThrow(
+            () -> new ObjectNotFoundException(ContractAgreement.class, id));
+  }
 }

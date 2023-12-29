@@ -8,14 +8,34 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
- *       Masatake Iwasaki (NTT DATA) - fixed failure due to assertion timeout
- *       SAP SE - refactoring
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation Masatake Iwasaki (NTT DATA) - fixed failure due to assertion
+ * timeout SAP SE - refactoring
  *
  */
 
 package org.eclipse.edc.connector.service.transferprocess;
 
+import static java.util.concurrent.CompletableFuture.completedFuture;
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.eclipse.edc.junit.matchers.EventEnvelopeMatcher.isEnvelopeOf;
+import static org.eclipse.edc.junit.testfixtures.TestUtils.getFreePort;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.matches;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
 import org.eclipse.edc.connector.contract.spi.negotiation.store.ContractNegotiationStore;
 import org.eclipse.edc.connector.core.event.EventExecutorServiceContainer;
 import org.eclipse.edc.connector.dataplane.selector.spi.store.DataPlaneInstanceStore;
@@ -61,185 +81,200 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.UUID;
-
-import static java.util.concurrent.CompletableFuture.completedFuture;
-import static java.util.concurrent.Executors.newSingleThreadExecutor;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-import static org.eclipse.edc.junit.matchers.EventEnvelopeMatcher.isEnvelopeOf;
-import static org.eclipse.edc.junit.testfixtures.TestUtils.getFreePort;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.ArgumentMatchers.matches;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(EdcExtension.class)
 public class TransferProcessEventDispatchTest {
 
-    public static final Duration TIMEOUT = Duration.ofSeconds(30);
-    private final EventSubscriber eventSubscriber = mock(EventSubscriber.class);
-    private final IdentityService identityService = mock();
+  public static final Duration TIMEOUT = Duration.ofSeconds(30);
+  private final EventSubscriber eventSubscriber = mock(EventSubscriber.class);
+  private final IdentityService identityService = mock();
 
-    @NotNull
-    private static RemoteMessageDispatcher getTestDispatcher() {
-        var testDispatcher = mock(RemoteMessageDispatcher.class);
-        when(testDispatcher.protocol()).thenReturn("test");
-        when(testDispatcher.dispatch(any(), any())).thenReturn(completedFuture(StatusResult.success("any")));
-        return testDispatcher;
-    }
+  @NotNull
+  private static RemoteMessageDispatcher getTestDispatcher() {
+    var testDispatcher = mock(RemoteMessageDispatcher.class);
+    when(testDispatcher.protocol()).thenReturn("test");
+    when(testDispatcher.dispatch(any(), any()))
+        .thenReturn(completedFuture(StatusResult.success("any")));
+    return testDispatcher;
+  }
 
-    @BeforeEach
-    void setUp(EdcExtension extension) {
-        var configuration = Map.of(
-                "edc.transfer.send.retry.limit", "0",
-                "edc.transfer.send.retry.base-delay.ms", "0",
-                "web.http.port", String.valueOf(getFreePort()),
-                "web.http.path", "/api"
-        );
+  @BeforeEach
+  void setUp(EdcExtension extension) {
+    var configuration =
+        Map.of("edc.transfer.send.retry.limit", "0",
+               "edc.transfer.send.retry.base-delay.ms", "0", "web.http.port",
+               String.valueOf(getFreePort()), "web.http.path", "/api");
 
-        extension.setConfiguration(configuration);
-        extension.registerServiceMock(TransferWaitStrategy.class, () -> 1);
-        extension.registerServiceMock(EventExecutorServiceContainer.class, new EventExecutorServiceContainer(newSingleThreadExecutor()));
-        extension.registerServiceMock(IdentityService.class, identityService);
-        extension.registerServiceMock(ProtocolWebhook.class, () -> "http://dummy");
-        extension.registerServiceMock(DataPlaneInstanceStore.class, mock(DataPlaneInstanceStore.class));
-        extension.registerServiceMock(PolicyArchive.class, mock(PolicyArchive.class));
-        extension.registerServiceMock(ContractNegotiationStore.class, mock(ContractNegotiationStore.class));
-        extension.registerServiceMock(ParticipantAgentService.class, mock(ParticipantAgentService.class));
-        var dataAddressValidatorRegistry = mock(DataAddressValidatorRegistry.class);
-        when(dataAddressValidatorRegistry.validateSource(any())).thenReturn(ValidationResult.success());
-        when(dataAddressValidatorRegistry.validateDestination(any())).thenReturn(ValidationResult.success());
-        extension.registerServiceMock(DataAddressValidatorRegistry.class, dataAddressValidatorRegistry);
-    }
+    extension.setConfiguration(configuration);
+    extension.registerServiceMock(TransferWaitStrategy.class, () -> 1);
+    extension.registerServiceMock(
+        EventExecutorServiceContainer.class,
+        new EventExecutorServiceContainer(newSingleThreadExecutor()));
+    extension.registerServiceMock(IdentityService.class, identityService);
+    extension.registerServiceMock(ProtocolWebhook.class, () -> "http://dummy");
+    extension.registerServiceMock(DataPlaneInstanceStore.class,
+                                  mock(DataPlaneInstanceStore.class));
+    extension.registerServiceMock(PolicyArchive.class,
+                                  mock(PolicyArchive.class));
+    extension.registerServiceMock(ContractNegotiationStore.class,
+                                  mock(ContractNegotiationStore.class));
+    extension.registerServiceMock(ParticipantAgentService.class,
+                                  mock(ParticipantAgentService.class));
+    var dataAddressValidatorRegistry = mock(DataAddressValidatorRegistry.class);
+    when(dataAddressValidatorRegistry.validateSource(any()))
+        .thenReturn(ValidationResult.success());
+    when(dataAddressValidatorRegistry.validateDestination(any()))
+        .thenReturn(ValidationResult.success());
+    extension.registerServiceMock(DataAddressValidatorRegistry.class,
+                                  dataAddressValidatorRegistry);
+  }
 
-    @Test
-    void shouldDispatchEventsOnTransferProcessStateChanges(TransferProcessService service,
-                                                           TransferProcessProtocolService protocolService,
-                                                           EventRouter eventRouter,
-                                                           RemoteMessageDispatcherRegistry dispatcherRegistry,
-                                                           PolicyArchive policyArchive,
-                                                           ContractNegotiationStore negotiationStore,
-                                                           ParticipantAgentService agentService) {
+  @Test
+  void shouldDispatchEventsOnTransferProcessStateChanges(
+      TransferProcessService service,
+      TransferProcessProtocolService protocolService, EventRouter eventRouter,
+      RemoteMessageDispatcherRegistry dispatcherRegistry,
+      PolicyArchive policyArchive, ContractNegotiationStore negotiationStore,
+      ParticipantAgentService agentService) {
 
-        var token = ClaimToken.Builder.newInstance().build();
-        var tokenRepresentation = TokenRepresentation.Builder.newInstance().token(UUID.randomUUID().toString()).build();
+    var token = ClaimToken.Builder.newInstance().build();
+    var tokenRepresentation = TokenRepresentation.Builder.newInstance()
+                                  .token(UUID.randomUUID().toString())
+                                  .build();
 
-        when(identityService.verifyJwtToken(eq(tokenRepresentation), isA(VerificationContext.class))).thenReturn(Result.success(token));
+    when(identityService.verifyJwtToken(eq(tokenRepresentation),
+                                        isA(VerificationContext.class)))
+        .thenReturn(Result.success(token));
 
-        var agent = mock(ParticipantAgent.class);
-        var agreement = mock(ContractAgreement.class);
-        var providerId = "ProviderId";
+    var agent = mock(ParticipantAgent.class);
+    var agreement = mock(ContractAgreement.class);
+    var providerId = "ProviderId";
 
-        when(agreement.getProviderId()).thenReturn(providerId);
-        when(agent.getIdentity()).thenReturn(providerId);
+    when(agreement.getProviderId()).thenReturn(providerId);
+    when(agent.getIdentity()).thenReturn(providerId);
 
+    dispatcherRegistry.register(getTestDispatcher());
+    when(policyArchive.findPolicyForContract(matches("contractId")))
+        .thenReturn(mock(Policy.class));
+    when(negotiationStore.findContractAgreement("contractId"))
+        .thenReturn(agreement);
+    when(agentService.createFor(token)).thenReturn(agent);
+    eventRouter.register(TransferProcessEvent.class, eventSubscriber);
 
-        dispatcherRegistry.register(getTestDispatcher());
-        when(policyArchive.findPolicyForContract(matches("contractId"))).thenReturn(mock(Policy.class));
-        when(negotiationStore.findContractAgreement("contractId")).thenReturn(agreement);
-        when(agentService.createFor(token)).thenReturn(agent);
-        eventRouter.register(TransferProcessEvent.class, eventSubscriber);
+    var transferRequest = createTransferRequest();
 
-        var transferRequest = createTransferRequest();
+    var initiateResult = service.initiateTransfer(transferRequest);
 
-        var initiateResult = service.initiateTransfer(transferRequest);
+    await().atMost(TIMEOUT).untilAsserted(() -> {
+      verify(eventSubscriber)
+          .on(argThat(isEnvelopeOf(TransferProcessInitiated.class)));
+      verify(eventSubscriber)
+          .on(argThat(isEnvelopeOf(TransferProcessProvisioned.class)));
+      verify(eventSubscriber)
+          .on(argThat(isEnvelopeOf(TransferProcessRequested.class)));
+    });
 
-        await().atMost(TIMEOUT).untilAsserted(() -> {
-            verify(eventSubscriber).on(argThat(isEnvelopeOf(TransferProcessInitiated.class)));
-            verify(eventSubscriber).on(argThat(isEnvelopeOf(TransferProcessProvisioned.class)));
-            verify(eventSubscriber).on(argThat(isEnvelopeOf(TransferProcessRequested.class)));
-        });
+    var dataAddress = DataAddress.Builder.newInstance().type("test").build();
+    var startMessage = TransferStartMessage.Builder.newInstance()
+                           .processId("dataRequestId")
+                           .protocol("any")
+                           .counterPartyAddress("http://any")
+                           .dataAddress(dataAddress)
+                           .build();
 
-        var dataAddress = DataAddress.Builder.newInstance().type("test").build();
-        var startMessage = TransferStartMessage.Builder.newInstance()
-                .processId("dataRequestId")
-                .protocol("any")
-                .counterPartyAddress("http://any")
-                .dataAddress(dataAddress)
-                .build();
+    protocolService.notifyStarted(startMessage, tokenRepresentation);
 
-        protocolService.notifyStarted(startMessage, tokenRepresentation);
+    await().atMost(TIMEOUT).untilAsserted(() -> {
+      ArgumentCaptor<EventEnvelope<TransferProcessStarted>> captor =
+          ArgumentCaptor.forClass(EventEnvelope.class);
+      verify(eventSubscriber, times(4)).on(captor.capture());
+      assertThat(captor.getValue())
+          .isNotNull()
+          .extracting(EventEnvelope::getPayload)
+          .extracting(TransferProcessStarted::getDataAddress)
+          .usingRecursiveComparison()
+          .isEqualTo(dataAddress);
+    });
 
-        await().atMost(TIMEOUT).untilAsserted(() -> {
-            ArgumentCaptor<EventEnvelope<TransferProcessStarted>> captor = ArgumentCaptor.forClass(EventEnvelope.class);
-            verify(eventSubscriber, times(4)).on(captor.capture());
-            assertThat(captor.getValue()).isNotNull()
-                    .extracting(EventEnvelope::getPayload)
-                    .extracting(TransferProcessStarted::getDataAddress)
-                    .usingRecursiveComparison().isEqualTo(dataAddress);
-        });
+    var transferProcess = initiateResult.getContent();
+    service.complete(transferProcess.getId())
+        .orElseThrow(f
+                     -> new EdcException("Transfer cannot be completed: " +
+                                         f.getFailureDetail()));
 
-        var transferProcess = initiateResult.getContent();
-        service.complete(transferProcess.getId()).orElseThrow(f -> new EdcException("Transfer cannot be completed: " + f.getFailureDetail()));
+    await().atMost(TIMEOUT).untilAsserted(() -> {
+      verify(eventSubscriber)
+          .on(argThat(isEnvelopeOf(TransferProcessCompleted.class)));
+    });
 
-        await().atMost(TIMEOUT)
-                .untilAsserted(() -> {
-                    verify(eventSubscriber).on(argThat(isEnvelopeOf(TransferProcessCompleted.class)));
-                });
+    service.deprovision(transferProcess.getId());
 
-        service.deprovision(transferProcess.getId());
+    await().atMost(TIMEOUT).untilAsserted(() -> {
+      verify(eventSubscriber)
+          .on(argThat(isEnvelopeOf(TransferProcessDeprovisioned.class)));
+    });
+  }
 
-        await().atMost(TIMEOUT).untilAsserted(() -> {
-            verify(eventSubscriber).on(argThat(isEnvelopeOf(TransferProcessDeprovisioned.class)));
-        });
-    }
+  @Test
+  void shouldTerminateOnInvalidPolicy(
+      TransferProcessService service, EventRouter eventRouter,
+      RemoteMessageDispatcherRegistry dispatcherRegistry) {
+    dispatcherRegistry.register(getTestDispatcher());
+    eventRouter.register(TransferProcessEvent.class, eventSubscriber);
+    var transferRequest = createTransferRequest();
 
-    @Test
-    void shouldTerminateOnInvalidPolicy(TransferProcessService service, EventRouter eventRouter, RemoteMessageDispatcherRegistry dispatcherRegistry) {
-        dispatcherRegistry.register(getTestDispatcher());
-        eventRouter.register(TransferProcessEvent.class, eventSubscriber);
-        var transferRequest = createTransferRequest();
+    service.initiateTransfer(transferRequest);
 
-        service.initiateTransfer(transferRequest);
+    await().atMost(TIMEOUT).untilAsserted(() -> {
+      verify(eventSubscriber)
+          .on(argThat(isEnvelopeOf(TransferProcessInitiated.class)));
+      verify(eventSubscriber)
+          .on(argThat(isEnvelopeOf(TransferProcessTerminated.class)));
+    });
+  }
 
-        await().atMost(TIMEOUT).untilAsserted(() -> {
-            verify(eventSubscriber).on(argThat(isEnvelopeOf(TransferProcessInitiated.class)));
-            verify(eventSubscriber).on(argThat(isEnvelopeOf(TransferProcessTerminated.class)));
-        });
-    }
+  @Test
+  void shouldDispatchEventOnTransferProcessTerminated(
+      TransferProcessService service, EventRouter eventRouter,
+      RemoteMessageDispatcherRegistry dispatcherRegistry) {
+    dispatcherRegistry.register(getTestDispatcher());
+    eventRouter.register(TransferProcessEvent.class, eventSubscriber);
+    var transferRequest = createTransferRequest();
 
-    @Test
-    void shouldDispatchEventOnTransferProcessTerminated(TransferProcessService service, EventRouter eventRouter, RemoteMessageDispatcherRegistry dispatcherRegistry) {
-        dispatcherRegistry.register(getTestDispatcher());
-        eventRouter.register(TransferProcessEvent.class, eventSubscriber);
-        var transferRequest = createTransferRequest();
+    var initiateResult = service.initiateTransfer(transferRequest);
 
-        var initiateResult = service.initiateTransfer(transferRequest);
+    service.terminate(new TerminateTransferCommand(
+        initiateResult.getContent().getId(), "any reason"));
 
-        service.terminate(new TerminateTransferCommand(initiateResult.getContent().getId(), "any reason"));
+    await().atMost(TIMEOUT).untilAsserted(
+        ()
+            -> verify(eventSubscriber, atLeastOnce())
+                   .on(argThat(isEnvelopeOf(TransferProcessTerminated.class))));
+  }
 
-        await().atMost(TIMEOUT).untilAsserted(() -> verify(eventSubscriber, atLeastOnce()).on(argThat(isEnvelopeOf(TransferProcessTerminated.class))));
-    }
+  @Test
+  void shouldDispatchEventOnTransferProcessFailure(
+      TransferProcessService service, EventRouter eventRouter,
+      RemoteMessageDispatcherRegistry dispatcherRegistry) {
+    dispatcherRegistry.register(getTestDispatcher());
+    eventRouter.register(TransferProcessEvent.class, eventSubscriber);
+    var transferRequest = createTransferRequest();
 
-    @Test
-    void shouldDispatchEventOnTransferProcessFailure(TransferProcessService service, EventRouter eventRouter, RemoteMessageDispatcherRegistry dispatcherRegistry) {
-        dispatcherRegistry.register(getTestDispatcher());
-        eventRouter.register(TransferProcessEvent.class, eventSubscriber);
-        var transferRequest = createTransferRequest();
+    service.initiateTransfer(transferRequest);
 
-        service.initiateTransfer(transferRequest);
+    await().atMost(TIMEOUT).untilAsserted(
+        ()
+            -> verify(eventSubscriber)
+                   .on(argThat(isEnvelopeOf(TransferProcessTerminated.class))));
+  }
 
-        await().atMost(TIMEOUT).untilAsserted(() -> verify(eventSubscriber).on(argThat(isEnvelopeOf(TransferProcessTerminated.class))));
-    }
-
-    private TransferRequest createTransferRequest() {
-        return TransferRequest.Builder.newInstance()
-                .id("dataRequestId")
-                .assetId("assetId")
-                .dataDestination(DataAddress.Builder.newInstance().type("any").build())
-                .protocol("test")
-                .counterPartyAddress("http://an/address")
-                .contractId("contractId")
-                .build();
-    }
-
+  private TransferRequest createTransferRequest() {
+    return TransferRequest.Builder.newInstance()
+        .id("dataRequestId")
+        .assetId("assetId")
+        .dataDestination(DataAddress.Builder.newInstance().type("any").build())
+        .protocol("test")
+        .counterPartyAddress("http://an/address")
+        .contractId("contractId")
+        .build();
+  }
 }

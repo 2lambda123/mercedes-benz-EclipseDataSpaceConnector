@@ -8,12 +8,26 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Fraunhofer Institute for Software and Systems Engineering - initial API and implementation
+ *       Fraunhofer Institute for Software and Systems Engineering - initial API
+ * and implementation
  *
  */
 
 package org.eclipse.edc.protocol.dsp.api.configuration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.eclipse.edc.protocol.dsp.api.configuration.DspApiConfigurationExtension.CONTEXT_ALIAS;
+import static org.eclipse.edc.protocol.dsp.api.configuration.DspApiConfigurationExtension.DEFAULT_DSP_CALLBACK_ADDRESS;
+import static org.eclipse.edc.protocol.dsp.api.configuration.DspApiConfigurationExtension.DSP_CALLBACK_ADDRESS;
+import static org.eclipse.edc.protocol.dsp.api.configuration.DspApiConfigurationExtension.SETTINGS;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Map;
 import org.eclipse.edc.junit.extensions.DependencyInjectionExtension;
 import org.eclipse.edc.spi.system.ServiceExtensionContext;
 import org.eclipse.edc.spi.system.configuration.ConfigFactory;
@@ -28,80 +42,75 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.eclipse.edc.protocol.dsp.api.configuration.DspApiConfigurationExtension.CONTEXT_ALIAS;
-import static org.eclipse.edc.protocol.dsp.api.configuration.DspApiConfigurationExtension.DEFAULT_DSP_CALLBACK_ADDRESS;
-import static org.eclipse.edc.protocol.dsp.api.configuration.DspApiConfigurationExtension.DSP_CALLBACK_ADDRESS;
-import static org.eclipse.edc.protocol.dsp.api.configuration.DspApiConfigurationExtension.SETTINGS;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(DependencyInjectionExtension.class)
 class DspApiConfigurationExtensionTest {
 
-    private final WebServiceConfigurer configurer = mock();
-    private final WebServer webServer = mock();
-    private final WebService webService = mock();
-    private final TypeManager typeManager = mock();
+  private final WebServiceConfigurer configurer = mock();
+  private final WebServer webServer = mock();
+  private final WebService webService = mock();
+  private final TypeManager typeManager = mock();
 
-    @BeforeEach
-    void setUp(ServiceExtensionContext context) {
-        context.registerService(WebServer.class, webServer);
-        context.registerService(WebService.class, webService);
-        context.registerService(WebServiceConfigurer.class, configurer);
-        context.registerService(TypeManager.class, typeManager);
+  @BeforeEach
+  void setUp(ServiceExtensionContext context) {
+    context.registerService(WebServer.class, webServer);
+    context.registerService(WebService.class, webService);
+    context.registerService(WebServiceConfigurer.class, configurer);
+    context.registerService(TypeManager.class, typeManager);
 
-        var webServiceConfiguration = WebServiceConfiguration.Builder.newInstance()
-                .contextAlias(CONTEXT_ALIAS)
-                .path("/path")
-                .port(1234)
-                .build();
-        when(configurer.configure(any(), any(), any())).thenReturn(webServiceConfiguration);
-        when(typeManager.getMapper(any())).thenReturn(mock());
-    }
+    var webServiceConfiguration = WebServiceConfiguration.Builder.newInstance()
+                                      .contextAlias(CONTEXT_ALIAS)
+                                      .path("/path")
+                                      .port(1234)
+                                      .build();
+    when(configurer.configure(any(), any(), any()))
+        .thenReturn(webServiceConfiguration);
+    when(typeManager.getMapper(any())).thenReturn(mock());
+  }
 
-    @Test
-    void initialize_noSettingsProvided_useDspDefault(DspApiConfigurationExtension extension, ServiceExtensionContext context) {
-        when(context.getConfig()).thenReturn(ConfigFactory.empty());
-        when(context.getSetting(DSP_CALLBACK_ADDRESS, DEFAULT_DSP_CALLBACK_ADDRESS)).thenReturn(DEFAULT_DSP_CALLBACK_ADDRESS);
+  @Test
+  void initialize_noSettingsProvided_useDspDefault(
+      DspApiConfigurationExtension extension, ServiceExtensionContext context) {
+    when(context.getConfig()).thenReturn(ConfigFactory.empty());
+    when(context.getSetting(DSP_CALLBACK_ADDRESS, DEFAULT_DSP_CALLBACK_ADDRESS))
+        .thenReturn(DEFAULT_DSP_CALLBACK_ADDRESS);
 
-        extension.initialize(context);
+    extension.initialize(context);
 
-        verify(configurer).configure(context, webServer, SETTINGS);
-        var apiConfig = context.getService(DspApiConfiguration.class);
-        assertThat(apiConfig.getContextAlias()).isEqualTo(CONTEXT_ALIAS);
-        assertThat(apiConfig.getDspCallbackAddress()).isEqualTo(DEFAULT_DSP_CALLBACK_ADDRESS);
-    }
+    verify(configurer).configure(context, webServer, SETTINGS);
+    var apiConfig = context.getService(DspApiConfiguration.class);
+    assertThat(apiConfig.getContextAlias()).isEqualTo(CONTEXT_ALIAS);
+    assertThat(apiConfig.getDspCallbackAddress())
+        .isEqualTo(DEFAULT_DSP_CALLBACK_ADDRESS);
+  }
 
-    @Test
-    void initialize_settingsProvided_useSettings(DspApiConfigurationExtension extension, ServiceExtensionContext context) {
-        var webhookAddress = "http://webhook";
-        when(context.getConfig()).thenReturn(ConfigFactory.fromMap(Map.of(
-                "web.http.protocol.port", String.valueOf(1234),
-                "web.http.protocol.path", "/path"))
-        );
-        when(context.getSetting(DSP_CALLBACK_ADDRESS, DEFAULT_DSP_CALLBACK_ADDRESS)).thenReturn(webhookAddress);
+  @Test
+  void initialize_settingsProvided_useSettings(
+      DspApiConfigurationExtension extension, ServiceExtensionContext context) {
+    var webhookAddress = "http://webhook";
+    when(context.getConfig())
+        .thenReturn(ConfigFactory.fromMap(
+            Map.of("web.http.protocol.port", String.valueOf(1234),
+                   "web.http.protocol.path", "/path")));
+    when(context.getSetting(DSP_CALLBACK_ADDRESS, DEFAULT_DSP_CALLBACK_ADDRESS))
+        .thenReturn(webhookAddress);
 
-        extension.initialize(context);
+    extension.initialize(context);
 
-        verify(configurer).configure(context, webServer, SETTINGS);
-        var apiConfig = context.getService(DspApiConfiguration.class);
-        assertThat(apiConfig.getContextAlias()).isEqualTo(CONTEXT_ALIAS);
-        assertThat(apiConfig.getDspCallbackAddress()).isEqualTo(webhookAddress);
-    }
+    verify(configurer).configure(context, webServer, SETTINGS);
+    var apiConfig = context.getService(DspApiConfiguration.class);
+    assertThat(apiConfig.getContextAlias()).isEqualTo(CONTEXT_ALIAS);
+    assertThat(apiConfig.getDspCallbackAddress()).isEqualTo(webhookAddress);
+  }
 
-    @Test
-    void initialize_shouldRegisterWebServiceProviders(DspApiConfigurationExtension extension, ServiceExtensionContext context) {
-        extension.initialize(context);
+  @Test
+  void initialize_shouldRegisterWebServiceProviders(
+      DspApiConfigurationExtension extension, ServiceExtensionContext context) {
+    extension.initialize(context);
 
-        verify(webService).registerResource(eq(CONTEXT_ALIAS), isA(ObjectMapperProvider.class));
-        verify(webService).registerResource(eq(CONTEXT_ALIAS), isA(JerseyJsonLdInterceptor.class));
-    }
-    
+    verify(webService)
+        .registerResource(eq(CONTEXT_ALIAS), isA(ObjectMapperProvider.class));
+    verify(webService)
+        .registerResource(eq(CONTEXT_ALIAS),
+                          isA(JerseyJsonLdInterceptor.class));
+  }
 }

@@ -14,6 +14,14 @@
 
 package org.eclipse.edc.connector.transfer.dataplane.flow;
 
+import static java.lang.String.format;
+import static org.eclipse.edc.connector.transfer.dataplane.spi.TransferDataPlaneConstants.HTTP_PROXY;
+import static org.eclipse.edc.connector.transfer.spi.flow.FlowType.PULL;
+import static org.eclipse.edc.spi.response.ResponseStatus.FATAL_ERROR;
+import static org.eclipse.edc.spi.response.StatusResult.failure;
+
+import java.util.Optional;
+import java.util.Set;
 import org.eclipse.edc.connector.dataplane.selector.spi.DataPlaneSelectorService;
 import org.eclipse.edc.connector.transfer.dataplane.proxy.ConsumerPullDataPlaneProxyResolver;
 import org.eclipse.edc.connector.transfer.spi.flow.DataFlowController;
@@ -25,53 +33,58 @@ import org.eclipse.edc.spi.types.domain.DataAddress;
 import org.eclipse.edc.spi.types.domain.asset.Asset;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Optional;
-import java.util.Set;
+public class ConsumerPullTransferDataFlowController
+    implements DataFlowController {
 
-import static java.lang.String.format;
-import static org.eclipse.edc.connector.transfer.dataplane.spi.TransferDataPlaneConstants.HTTP_PROXY;
-import static org.eclipse.edc.connector.transfer.spi.flow.FlowType.PULL;
-import static org.eclipse.edc.spi.response.ResponseStatus.FATAL_ERROR;
-import static org.eclipse.edc.spi.response.StatusResult.failure;
+  private final DataPlaneSelectorService selectorService;
+  private final ConsumerPullDataPlaneProxyResolver resolver;
 
-public class ConsumerPullTransferDataFlowController implements DataFlowController {
+  public ConsumerPullTransferDataFlowController(
+      DataPlaneSelectorService selectorService,
+      ConsumerPullDataPlaneProxyResolver resolver) {
+    this.selectorService = selectorService;
+    this.resolver = resolver;
+  }
 
-    private final DataPlaneSelectorService selectorService;
-    private final ConsumerPullDataPlaneProxyResolver resolver;
+  @Override
+  public boolean canHandle(TransferProcess transferProcess) {
+    return HTTP_PROXY.equals(transferProcess.getDestinationType());
+  }
 
-    public ConsumerPullTransferDataFlowController(DataPlaneSelectorService selectorService, ConsumerPullDataPlaneProxyResolver resolver) {
-        this.selectorService = selectorService;
-        this.resolver = resolver;
-    }
+  @Override
+  public @NotNull StatusResult<DataFlowResponse>
+  initiateFlow(TransferProcess transferProcess, Policy policy) {
+    var contentAddress = transferProcess.getContentDataAddress();
+    var dataRequest = transferProcess.getDataRequest();
+    return Optional
+        .ofNullable(selectorService.select(contentAddress,
+                                           dataRequest.getDataDestination()))
+        .map(instance
+             -> resolver.toDataAddress(dataRequest, contentAddress, instance)
+                    .map(this::toResponse)
+                    .map(StatusResult::success)
+                    .orElse(failure
+                            -> failure(FATAL_ERROR,
+                                       "Failed to generate proxy: " +
+                                           failure.getFailureDetail())))
+        .orElse(failure(
+            FATAL_ERROR,
+            format(
+                "Failed to find DataPlaneInstance for source/destination: %s/%s",
+                contentAddress.getType(), HTTP_PROXY)));
+  }
 
-    @Override
-    public boolean canHandle(TransferProcess transferProcess) {
-        return HTTP_PROXY.equals(transferProcess.getDestinationType());
-    }
+  @Override
+  public StatusResult<Void> terminate(TransferProcess transferProcess) {
+    return StatusResult.success();
+  }
 
-    @Override
-    public @NotNull StatusResult<DataFlowResponse> initiateFlow(TransferProcess transferProcess, Policy policy) {
-        var contentAddress = transferProcess.getContentDataAddress();
-        var dataRequest = transferProcess.getDataRequest();
-        return Optional.ofNullable(selectorService.select(contentAddress, dataRequest.getDataDestination()))
-                .map(instance -> resolver.toDataAddress(dataRequest, contentAddress, instance)
-                        .map(this::toResponse)
-                        .map(StatusResult::success)
-                        .orElse(failure -> failure(FATAL_ERROR, "Failed to generate proxy: " + failure.getFailureDetail())))
-                .orElse(failure(FATAL_ERROR, format("Failed to find DataPlaneInstance for source/destination: %s/%s", contentAddress.getType(), HTTP_PROXY)));
-    }
+  @Override
+  public Set<String> transferTypesFor(Asset asset) {
+    return Set.of("%s-%s".formatted("Http", PULL));
+  }
 
-    @Override
-    public StatusResult<Void> terminate(TransferProcess transferProcess) {
-        return StatusResult.success();
-    }
-
-    @Override
-    public Set<String> transferTypesFor(Asset asset) {
-        return Set.of("%s-%s".formatted("Http", PULL));
-    }
-
-    private DataFlowResponse toResponse(DataAddress address) {
-        return DataFlowResponse.Builder.newInstance().dataAddress(address).build();
-    }
+  private DataFlowResponse toResponse(DataAddress address) {
+    return DataFlowResponse.Builder.newInstance().dataAddress(address).build();
+  }
 }

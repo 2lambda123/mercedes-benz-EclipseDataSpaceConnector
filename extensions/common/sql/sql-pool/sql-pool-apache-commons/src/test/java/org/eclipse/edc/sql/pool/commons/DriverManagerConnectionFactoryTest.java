@@ -8,20 +8,12 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.sql.pool.commons;
-
-import org.eclipse.edc.spi.persistence.EdcPersistenceException;
-import org.eclipse.edc.sql.DriverManagerConnectionFactory;
-import org.junit.jupiter.api.Test;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,28 +22,45 @@ import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Properties;
+import org.eclipse.edc.spi.persistence.EdcPersistenceException;
+import org.eclipse.edc.sql.DriverManagerConnectionFactory;
+import org.junit.jupiter.api.Test;
+
 public class DriverManagerConnectionFactoryTest {
-    private static final String DS_NAME = "datasource";
-    private final Connection connection = mock();
-    private final DriverManagerConnectionFactory factory = new DriverManagerConnectionFactory();
+  private static final String DS_NAME = "datasource";
+  private final Connection connection = mock();
+  private final DriverManagerConnectionFactory factory =
+      new DriverManagerConnectionFactory();
 
-    @Test
-    void create() throws SQLException {
-        try (var driverManagerMock = mockStatic(DriverManager.class)) {
-            driverManagerMock.when(() -> DriverManager.getConnection(eq(DS_NAME), any(Properties.class))).thenReturn(connection);
-            try (var conn = factory.create(DS_NAME, new Properties())) {
-                assertThat(conn).isEqualTo(connection);
-            }
-        }
+  @Test
+  void create() throws SQLException {
+    try (var driverManagerMock = mockStatic(DriverManager.class)) {
+      driverManagerMock
+          .when(()
+                    -> DriverManager.getConnection(eq(DS_NAME),
+                                                   any(Properties.class)))
+          .thenReturn(connection);
+      try (var conn = factory.create(DS_NAME, new Properties())) {
+        assertThat(conn).isEqualTo(connection);
+      }
     }
+  }
 
-    @Test
-    void create_shouldThrowException() {
-        try (var driverManagerMock = mockStatic(DriverManager.class)) {
-            driverManagerMock.when(() -> DriverManager.getConnection(eq(DS_NAME), any(Properties.class)))
-                    .thenThrow(SQLException.class);
+  @Test
+  void create_shouldThrowException() {
+    try (var driverManagerMock = mockStatic(DriverManager.class)) {
+      driverManagerMock
+          .when(()
+                    -> DriverManager.getConnection(eq(DS_NAME),
+                                                   any(Properties.class)))
+          .thenThrow(SQLException.class);
 
-            assertThatThrownBy(() -> factory.create(DS_NAME, new Properties())).isInstanceOf(EdcPersistenceException.class);
-        }
+      assertThatThrownBy(() -> factory.create(DS_NAME, new Properties()))
+          .isInstanceOf(EdcPersistenceException.class);
     }
+  }
 }

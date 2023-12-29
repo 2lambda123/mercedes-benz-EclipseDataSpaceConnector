@@ -16,6 +16,12 @@
 
 package org.eclipse.edc.connector.api.management.contractnegotiation;
 
+import static jakarta.json.stream.JsonCollectors.toJsonArray;
+import static org.eclipse.edc.connector.contract.spi.types.command.TerminateNegotiationCommand.TERMINATE_NEGOTIATION_TYPE;
+import static org.eclipse.edc.connector.contract.spi.types.negotiation.ContractRequest.CONTRACT_REQUEST_TYPE;
+import static org.eclipse.edc.spi.query.QuerySpec.EDC_QUERY_SPEC_TYPE;
+import static org.eclipse.edc.web.spi.exception.ServiceResultHandler.exceptionMapper;
+
 import jakarta.json.JsonArray;
 import jakarta.json.JsonObject;
 import jakarta.ws.rs.Consumes;
@@ -25,6 +31,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import java.util.Optional;
 import org.eclipse.edc.api.model.IdResponse;
 import org.eclipse.edc.connector.api.management.contractnegotiation.model.NegotiationState;
 import org.eclipse.edc.connector.contract.spi.types.command.TerminateNegotiationCommand;
@@ -41,124 +48,136 @@ import org.eclipse.edc.web.spi.exception.InvalidRequestException;
 import org.eclipse.edc.web.spi.exception.ObjectNotFoundException;
 import org.eclipse.edc.web.spi.exception.ValidationFailureException;
 
-import java.util.Optional;
-
-import static jakarta.json.stream.JsonCollectors.toJsonArray;
-import static org.eclipse.edc.connector.contract.spi.types.command.TerminateNegotiationCommand.TERMINATE_NEGOTIATION_TYPE;
-import static org.eclipse.edc.connector.contract.spi.types.negotiation.ContractRequest.CONTRACT_REQUEST_TYPE;
-import static org.eclipse.edc.spi.query.QuerySpec.EDC_QUERY_SPEC_TYPE;
-import static org.eclipse.edc.web.spi.exception.ServiceResultHandler.exceptionMapper;
-
-@Consumes({ MediaType.APPLICATION_JSON })
-@Produces({ MediaType.APPLICATION_JSON })
+@Consumes({MediaType.APPLICATION_JSON})
+@Produces({MediaType.APPLICATION_JSON})
 
 @Path("/v2/contractnegotiations")
-public class ContractNegotiationApiController implements ContractNegotiationApi {
-    private final ContractNegotiationService service;
-    private final TypeTransformerRegistry transformerRegistry;
-    private final Monitor monitor;
-    private final JsonObjectValidatorRegistry validatorRegistry;
+public class ContractNegotiationApiController
+    implements ContractNegotiationApi {
+  private final ContractNegotiationService service;
+  private final TypeTransformerRegistry transformerRegistry;
+  private final Monitor monitor;
+  private final JsonObjectValidatorRegistry validatorRegistry;
 
-    public ContractNegotiationApiController(ContractNegotiationService service, TypeTransformerRegistry transformerRegistry,
-                                            Monitor monitor, JsonObjectValidatorRegistry validatorRegistry) {
-        this.service = service;
-        this.transformerRegistry = transformerRegistry;
-        this.monitor = monitor;
-        this.validatorRegistry = validatorRegistry;
+  public ContractNegotiationApiController(
+      ContractNegotiationService service,
+      TypeTransformerRegistry transformerRegistry, Monitor monitor,
+      JsonObjectValidatorRegistry validatorRegistry) {
+    this.service = service;
+    this.transformerRegistry = transformerRegistry;
+    this.monitor = monitor;
+    this.validatorRegistry = validatorRegistry;
+  }
+
+  @POST
+  @Path("/request")
+  @Override
+  public JsonArray queryNegotiations(JsonObject querySpecJson) {
+    QuerySpec querySpec;
+    if (querySpecJson == null) {
+      querySpec = QuerySpec.Builder.newInstance().build();
+    } else {
+      validatorRegistry.validate(EDC_QUERY_SPEC_TYPE, querySpecJson)
+          .orElseThrow(ValidationFailureException::new);
+
+      querySpec = transformerRegistry.transform(querySpecJson, QuerySpec.class)
+                      .orElseThrow(InvalidRequestException::new);
     }
 
-    @POST
-    @Path("/request")
-    @Override
-    public JsonArray queryNegotiations(JsonObject querySpecJson) {
-        QuerySpec querySpec;
-        if (querySpecJson == null) {
-            querySpec = QuerySpec.Builder.newInstance().build();
-        } else {
-            validatorRegistry.validate(EDC_QUERY_SPEC_TYPE, querySpecJson)
-                    .orElseThrow(ValidationFailureException::new);
+    return service.search(querySpec)
+        .orElseThrow(exceptionMapper(ContractNegotiation.class, null))
+        .stream()
+        .map(it -> transformerRegistry.transform(it, JsonObject.class))
+        .peek(this::logIfError)
+        .filter(Result::succeeded)
+        .map(Result::getContent)
+        .collect(toJsonArray());
+  }
 
-            querySpec = transformerRegistry.transform(querySpecJson, QuerySpec.class)
-                    .orElseThrow(InvalidRequestException::new);
-        }
+  @GET
+  @Path("/{id}")
+  @Override
+  public JsonObject getNegotiation(@PathParam("id") String id) {
 
-        return service.search(querySpec).orElseThrow(exceptionMapper(ContractNegotiation.class, null)).stream()
-                .map(it -> transformerRegistry.transform(it, JsonObject.class))
-                .peek(this::logIfError)
-                .filter(Result::succeeded)
-                .map(Result::getContent)
-                .collect(toJsonArray());
-    }
+    return Optional.of(id)
+        .map(service::findbyId)
+        .map(it -> transformerRegistry.transform(it, JsonObject.class))
+        .map(Result::getContent)
+        .orElseThrow(
+            () -> new ObjectNotFoundException(ContractNegotiation.class, id));
+  }
 
-    @GET
-    @Path("/{id}")
-    @Override
-    public JsonObject getNegotiation(@PathParam("id") String id) {
+  @GET
+  @Path("/{id}/state")
+  @Override
+  public JsonObject getNegotiationState(@PathParam("id") String id) {
+    return Optional.of(id)
+        .map(service::getState)
+        .map(NegotiationState::new)
+        .map(state -> transformerRegistry.transform(state, JsonObject.class))
+        .orElseThrow(
+            () -> new ObjectNotFoundException(ContractNegotiation.class, id))
+        .orElseThrow(failure -> new EdcException(failure.getFailureDetail()));
+  }
 
-        return Optional.of(id)
-                .map(service::findbyId)
-                .map(it -> transformerRegistry.transform(it, JsonObject.class))
-                .map(Result::getContent)
-                .orElseThrow(() -> new ObjectNotFoundException(ContractNegotiation.class, id));
-    }
+  @GET
+  @Path("/{id}/agreement")
+  @Override
+  public JsonObject
+  getAgreementForNegotiation(@PathParam("id") String negotiationId) {
+    return Optional.of(negotiationId)
+        .map(service::getForNegotiation)
+        .map(
+            it
+            -> transformerRegistry.transform(it, JsonObject.class)
+                   .orElseThrow(
+                       failure -> new EdcException(failure.getFailureDetail())))
+        .orElseThrow(()
+                         -> new ObjectNotFoundException(
+                             ContractNegotiation.class, negotiationId));
+  }
 
-    @GET
-    @Path("/{id}/state")
-    @Override
-    public JsonObject getNegotiationState(@PathParam("id") String id) {
-        return Optional.of(id)
-                .map(service::getState)
-                .map(NegotiationState::new)
-                .map(state -> transformerRegistry.transform(state, JsonObject.class))
-                .orElseThrow(() -> new ObjectNotFoundException(ContractNegotiation.class, id))
-                .orElseThrow(failure -> new EdcException(failure.getFailureDetail()));
-    }
+  @POST
+  @Override
+  public JsonObject initiateContractNegotiation(JsonObject requestObject) {
+    validatorRegistry.validate(CONTRACT_REQUEST_TYPE, requestObject)
+        .orElseThrow(ValidationFailureException::new);
 
-    @GET
-    @Path("/{id}/agreement")
-    @Override
-    public JsonObject getAgreementForNegotiation(@PathParam("id") String negotiationId) {
-        return Optional.of(negotiationId)
-                .map(service::getForNegotiation)
-                .map(it -> transformerRegistry.transform(it, JsonObject.class)
-                        .orElseThrow(failure -> new EdcException(failure.getFailureDetail())))
-                .orElseThrow(() -> new ObjectNotFoundException(ContractNegotiation.class, negotiationId));
-    }
+    var contractRequest =
+        transformerRegistry.transform(requestObject, ContractRequest.class)
+            .orElseThrow(InvalidRequestException::new);
 
-    @POST
-    @Override
-    public JsonObject initiateContractNegotiation(JsonObject requestObject) {
-        validatorRegistry.validate(CONTRACT_REQUEST_TYPE, requestObject)
-                .orElseThrow(ValidationFailureException::new);
+    var contractNegotiation = service.initiateNegotiation(contractRequest);
 
-        var contractRequest = transformerRegistry.transform(requestObject, ContractRequest.class)
-                .orElseThrow(InvalidRequestException::new);
+    var responseDto = IdResponse.Builder.newInstance()
+                          .id(contractNegotiation.getId())
+                          .createdAt(contractNegotiation.getCreatedAt())
+                          .build();
 
-        var contractNegotiation = service.initiateNegotiation(contractRequest);
+    return transformerRegistry.transform(responseDto, JsonObject.class)
+        .orElseThrow(f
+                     -> new EdcException("Error creating response body: " +
+                                         f.getFailureDetail()));
+  }
 
-        var responseDto = IdResponse.Builder.newInstance()
-                .id(contractNegotiation.getId())
-                .createdAt(contractNegotiation.getCreatedAt())
-                .build();
+  @POST
+  @Path("/{id}/terminate")
+  @Override
+  public void terminateNegotiation(@PathParam("id") String id,
+                                   JsonObject terminateNegotiation) {
+    validatorRegistry.validate(TERMINATE_NEGOTIATION_TYPE, terminateNegotiation)
+        .orElseThrow(ValidationFailureException::new);
 
-        return transformerRegistry.transform(responseDto, JsonObject.class)
-                .orElseThrow(f -> new EdcException("Error creating response body: " + f.getFailureDetail()));
-    }
+    var command =
+        transformerRegistry
+            .transform(terminateNegotiation, TerminateNegotiationCommand.class)
+            .orElseThrow(InvalidRequestException::new);
 
-    @POST
-    @Path("/{id}/terminate")
-    @Override
-    public void terminateNegotiation(@PathParam("id") String id, JsonObject terminateNegotiation) {
-        validatorRegistry.validate(TERMINATE_NEGOTIATION_TYPE, terminateNegotiation)
-                .orElseThrow(ValidationFailureException::new);
+    service.terminate(command).orElseThrow(
+        exceptionMapper(ContractNegotiation.class, id));
+  }
 
-        var command = transformerRegistry.transform(terminateNegotiation, TerminateNegotiationCommand.class)
-                .orElseThrow(InvalidRequestException::new);
-
-        service.terminate(command).orElseThrow(exceptionMapper(ContractNegotiation.class, id));
-    }
-
-    private void logIfError(Result<?> result) {
-        result.onFailure(f -> monitor.warning(f.getFailureDetail()));
-    }
+  private void logIfError(Result<?> result) {
+    result.onFailure(f -> monitor.warning(f.getFailureDetail()));
+  }
 }

@@ -14,6 +14,13 @@
 
 package org.eclipse.edc.connector.transfer.dataplane.flow;
 
+import static java.util.stream.Collectors.toSet;
+import static org.eclipse.edc.connector.transfer.dataplane.spi.TransferDataPlaneConstants.HTTP_PROXY;
+import static org.eclipse.edc.connector.transfer.spi.flow.FlowType.PUSH;
+
+import java.util.Collection;
+import java.util.Set;
+import java.util.UUID;
 import org.eclipse.edc.connector.dataplane.selector.spi.DataPlaneSelectorService;
 import org.eclipse.edc.connector.dataplane.selector.spi.client.DataPlaneClientFactory;
 import org.eclipse.edc.connector.dataplane.selector.spi.instance.DataPlaneInstance;
@@ -27,64 +34,67 @@ import org.eclipse.edc.spi.types.domain.asset.Asset;
 import org.eclipse.edc.spi.types.domain.transfer.DataFlowRequest;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
-import java.util.Set;
-import java.util.UUID;
+public class ProviderPushTransferDataFlowController
+    implements DataFlowController {
 
-import static java.util.stream.Collectors.toSet;
-import static org.eclipse.edc.connector.transfer.dataplane.spi.TransferDataPlaneConstants.HTTP_PROXY;
-import static org.eclipse.edc.connector.transfer.spi.flow.FlowType.PUSH;
+  private final ControlApiUrl callbackUrl;
+  private final DataPlaneSelectorService selectorClient;
+  private final DataPlaneClientFactory clientFactory;
 
-public class ProviderPushTransferDataFlowController implements DataFlowController {
+  public ProviderPushTransferDataFlowController(
+      ControlApiUrl callbackUrl, DataPlaneSelectorService selectorClient,
+      DataPlaneClientFactory clientFactory) {
+    this.callbackUrl = callbackUrl;
+    this.selectorClient = selectorClient;
+    this.clientFactory = clientFactory;
+  }
 
-    private final ControlApiUrl callbackUrl;
-    private final DataPlaneSelectorService selectorClient;
-    private final DataPlaneClientFactory clientFactory;
+  @Override
+  public boolean canHandle(TransferProcess transferProcess) {
+    return !HTTP_PROXY.equals(transferProcess.getDestinationType());
+  }
 
-    public ProviderPushTransferDataFlowController(ControlApiUrl callbackUrl, DataPlaneSelectorService selectorClient, DataPlaneClientFactory clientFactory) {
-        this.callbackUrl = callbackUrl;
-        this.selectorClient = selectorClient;
-        this.clientFactory = clientFactory;
-    }
+  @Override
+  public @NotNull StatusResult<DataFlowResponse>
+  initiateFlow(TransferProcess transferProcess, Policy policy) {
+    var dataFlowRequest =
+        DataFlowRequest.Builder.newInstance()
+            .id(UUID.randomUUID().toString())
+            .processId(transferProcess.getId())
+            .trackable(true)
+            .sourceDataAddress(transferProcess.getContentDataAddress())
+            .destinationDataAddress(transferProcess.getDataDestination())
+            .callbackAddress(callbackUrl != null ? callbackUrl.get() : null)
+            .build();
 
-    @Override
-    public boolean canHandle(TransferProcess transferProcess) {
-        return !HTTP_PROXY.equals(transferProcess.getDestinationType());
-    }
+    var dataPlaneInstance =
+        selectorClient.select(transferProcess.getContentDataAddress(),
+                              transferProcess.getDataDestination());
+    return clientFactory.createClient(dataPlaneInstance)
+        .transfer(dataFlowRequest)
+        .map(it -> DataFlowResponse.Builder.newInstance().build());
+  }
 
-    @Override
-    public @NotNull StatusResult<DataFlowResponse> initiateFlow(TransferProcess transferProcess, Policy policy) {
-        var dataFlowRequest = DataFlowRequest.Builder.newInstance()
-                .id(UUID.randomUUID().toString())
-                .processId(transferProcess.getId())
-                .trackable(true)
-                .sourceDataAddress(transferProcess.getContentDataAddress())
-                .destinationDataAddress(transferProcess.getDataDestination())
-                .callbackAddress(callbackUrl != null ? callbackUrl.get() : null)
-                .build();
+  @Override
+  public StatusResult<Void> terminate(TransferProcess transferProcess) {
+    return selectorClient.getAll()
+        .stream()
+        .map(clientFactory::createClient)
+        .map(client -> client.terminate(transferProcess.getId()))
+        .reduce(StatusResult::merge)
+        .orElse(StatusResult.success());
+  }
 
-        var dataPlaneInstance = selectorClient.select(transferProcess.getContentDataAddress(), transferProcess.getDataDestination());
-        return clientFactory.createClient(dataPlaneInstance)
-                .transfer(dataFlowRequest)
-                .map(it -> DataFlowResponse.Builder.newInstance().build());
-    }
-
-    @Override
-    public StatusResult<Void> terminate(TransferProcess transferProcess) {
-        return selectorClient.getAll().stream().map(clientFactory::createClient)
-                .map(client -> client.terminate(transferProcess.getId()))
-                .reduce(StatusResult::merge)
-                .orElse(StatusResult.success());
-    }
-
-    @Override
-    public Set<String> transferTypesFor(Asset asset) {
-        return selectorClient.getAll().stream()
-                .filter(it -> it.getAllowedSourceTypes().contains(asset.getDataAddress().getType()))
-                .map(DataPlaneInstance::getAllowedDestTypes)
-                .flatMap(Collection::stream)
-                .map(it -> "%s-%s".formatted(it, PUSH))
-                .collect(toSet());
-    }
-
+  @Override
+  public Set<String> transferTypesFor(Asset asset) {
+    return selectorClient.getAll()
+        .stream()
+        .filter(it
+                -> it.getAllowedSourceTypes().contains(
+                    asset.getDataAddress().getType()))
+        .map(DataPlaneInstance::getAllowedDestTypes)
+        .flatMap(Collection::stream)
+        .map(it -> "%s-%s".formatted(it, PUSH))
+        .collect(toSet());
+  }
 }

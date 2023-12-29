@@ -8,7 +8,8 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
@@ -21,46 +22,56 @@ import com.apicatalog.ld.signature.method.MethodResolver;
 import com.apicatalog.ld.signature.method.VerificationMethod;
 import com.apicatalog.vc.VcTag;
 import com.apicatalog.vc.integrity.DataIntegrityKeyPair;
+import java.net.URI;
 import org.eclipse.edc.iam.did.spi.resolution.DidResolverRegistry;
 import org.eclipse.edc.spi.EdcException;
 
-import java.net.URI;
-
 /**
- * This class implements the MethodResolver interface and is responsible for resolving verification methods for a given DID by
- * delegating to the {@link DidResolverRegistry}.
+ * This class implements the MethodResolver interface and is responsible for
+ * resolving verification methods for a given DID by delegating to the {@link
+ * DidResolverRegistry}.
  */
 public class DidMethodResolver implements MethodResolver {
-    private final DidResolverRegistry resolverRegistry;
+  private final DidResolverRegistry resolverRegistry;
 
-    public DidMethodResolver(DidResolverRegistry resolverRegistry) {
-        this.resolverRegistry = resolverRegistry;
-    }
+  public DidMethodResolver(DidResolverRegistry resolverRegistry) {
+    this.resolverRegistry = resolverRegistry;
+  }
 
-    @Override
-    public VerificationMethod resolve(URI id, DocumentLoader loader, SignatureSuite suite) throws DocumentError {
-        var didDocument = resolverRegistry.resolve(id.toString())
-                .orElseThrow(failure -> new EdcException(failure.getFailureDetail()));
+  @Override
+  public VerificationMethod resolve(URI id, DocumentLoader loader,
+                                    SignatureSuite suite) throws DocumentError {
+    var didDocument =
+        resolverRegistry.resolve(id.toString())
+            .orElseThrow(
+                failure -> new EdcException(failure.getFailureDetail()));
 
-        return didDocument.getVerificationMethod().stream()
-                .map(verificationMethod -> DataIntegrityKeyPair.createVerificationKey(
-                        URI.create(verificationMethod.getId()),
-                        URI.create(verificationMethod.getType()),
-                        URI.create(verificationMethod.getController()),
-                        verificationMethod.serializePublicKey())
-                )
-                .findFirst()
-                .orElseThrow(() -> new DocumentError(DocumentError.ErrorType.Unknown, suite.getSchema().tagged(VcTag.VerificationMethod.name()).term()));
-    }
+    return didDocument.getVerificationMethod()
+        .stream()
+        .map(verificationMethod
+             -> DataIntegrityKeyPair.createVerificationKey(
+                 URI.create(verificationMethod.getId()),
+                 URI.create(verificationMethod.getType()),
+                 URI.create(verificationMethod.getController()),
+                 verificationMethod.serializePublicKey()))
+        .findFirst()
+        .orElseThrow(()
+                         -> new DocumentError(
+                             DocumentError.ErrorType.Unknown,
+                             suite.getSchema()
+                                 .tagged(VcTag.VerificationMethod.name())
+                                 .term()));
+  }
 
-    /**
-     * Determines whether the given ID is accepted by checking if it is supported by the resolverRegistry.
-     *
-     * @param id The ID to check.
-     * @return {@code true} if the ID is supported, {@code false} otherwise.
-     */
-    @Override
-    public boolean isAccepted(URI id) {
-        return resolverRegistry.isSupported(id.toString());
-    }
+  /**
+   * Determines whether the given ID is accepted by checking if it is supported
+   * by the resolverRegistry.
+   *
+   * @param id The ID to check.
+   * @return {@code true} if the ID is supported, {@code false} otherwise.
+   */
+  @Override
+  public boolean isAccepted(URI id) {
+    return resolverRegistry.isSupported(id.toString());
+  }
 }

@@ -18,61 +18,49 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Parameter Object for {@link IdentityService#obtainClientCredentials(TokenParameters)}.
+ * Parameter Object for {@link
+ * IdentityService#obtainClientCredentials(TokenParameters)}.
  */
 public class TokenParameters {
-    private final Map<String, Object> additional = new HashMap<>();
-    private String scope;
-    private String audience;
+  private final Map<String, Object> additional = new HashMap<>();
+  private String scope;
+  private String audience;
 
-    private TokenParameters() {
+  private TokenParameters() {}
+
+  public String getScope() { return scope; }
+
+  public String getAudience() { return audience; }
+
+  public Map<String, Object> getAdditional() { return additional; }
+
+  public static class Builder {
+    private final TokenParameters result;
+
+    private Builder() { result = new TokenParameters(); }
+
+    public static Builder newInstance() { return new Builder(); }
+
+    public Builder scope(String scope) {
+      result.scope = scope;
+      return this;
     }
 
-    public String getScope() {
-        return scope;
+    public Builder audience(String audience) {
+      result.audience = audience;
+      return this;
     }
 
-    public String getAudience() {
-        return audience;
+    public Builder additional(Map<String, Object> additional) {
+      result.additional.putAll(additional);
+      return this;
     }
 
-    public Map<String, Object> getAdditional() {
-        return additional;
+    public Builder additional(String key, Object value) {
+      result.additional.put(key, value);
+      return this;
     }
 
-    public static class Builder {
-        private final TokenParameters result;
-
-        private Builder() {
-            result = new TokenParameters();
-        }
-
-        public static Builder newInstance() {
-            return new Builder();
-        }
-
-        public Builder scope(String scope) {
-            result.scope = scope;
-            return this;
-        }
-
-        public Builder audience(String audience) {
-            result.audience = audience;
-            return this;
-        }
-
-        public Builder additional(Map<String, Object> additional) {
-            result.additional.putAll(additional);
-            return this;
-        }
-
-        public Builder additional(String key, Object value) {
-            result.additional.put(key, value);
-            return this;
-        }
-
-        public TokenParameters build() {
-            return result;
-        }
-    }
+    public TokenParameters build() { return result; }
+  }
 }

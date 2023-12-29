@@ -14,21 +14,19 @@
 
 package org.eclipse.edc.sql;
 
-import org.eclipse.edc.spi.persistence.EdcPersistenceException;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Properties;
+import org.eclipse.edc.spi.persistence.EdcPersistenceException;
 
 public class DriverManagerConnectionFactory implements ConnectionFactory {
 
-    @Override
-    public Connection create(String jdbcUrl, Properties properties) {
-        try {
-            return DriverManager.getConnection(jdbcUrl, properties);
-        } catch (Exception exception) {
-            throw new EdcPersistenceException(exception.getMessage(), exception);
-        }
+  @Override
+  public Connection create(String jdbcUrl, Properties properties) {
+    try {
+      return DriverManager.getConnection(jdbcUrl, properties);
+    } catch (Exception exception) {
+      throw new EdcPersistenceException(exception.getMessage(), exception);
     }
-
+  }
 }

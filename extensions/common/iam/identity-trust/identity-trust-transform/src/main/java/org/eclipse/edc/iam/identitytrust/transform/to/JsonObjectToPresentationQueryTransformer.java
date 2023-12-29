@@ -8,7 +8,8 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
@@ -19,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.json.JsonArray;
 import jakarta.json.JsonObject;
 import jakarta.json.JsonValue;
+import java.util.List;
 import org.eclipse.edc.identitytrust.model.credentialservice.PresentationQuery;
 import org.eclipse.edc.identitytrust.model.presentationdefinition.PresentationDefinition;
 import org.eclipse.edc.jsonld.spi.JsonLdKeywords;
@@ -27,25 +29,26 @@ import org.eclipse.edc.transform.spi.TransformerContext;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
-
 /**
  * Transforms a JsonObject into a PresentationQuery object.
  */
-public class JsonObjectToPresentationQueryTransformer extends AbstractJsonLdTransformer<JsonObject, PresentationQuery> {
+public class JsonObjectToPresentationQueryTransformer
+    extends AbstractJsonLdTransformer<JsonObject, PresentationQuery> {
 
-    private final ObjectMapper mapper;
+  private final ObjectMapper mapper;
 
-    public JsonObjectToPresentationQueryTransformer(ObjectMapper mapper) {
-        super(JsonObject.class, PresentationQuery.class);
-        this.mapper = mapper;
-    }
+  public JsonObjectToPresentationQueryTransformer(ObjectMapper mapper) {
+    super(JsonObject.class, PresentationQuery.class);
+    this.mapper = mapper;
+  }
 
-    @Override
-    public @Nullable PresentationQuery transform(@NotNull JsonObject jsonObject, @NotNull TransformerContext context) {
-        var bldr = PresentationQuery.Builder.newinstance();
+  @Override
+  public @Nullable
+  PresentationQuery transform(@NotNull JsonObject jsonObject,
+                              @NotNull TransformerContext context) {
+    var bldr = PresentationQuery.Builder.newinstance();
         visitProperties(jsonObject, (k, v) -> {
-            switch (k) {
+      switch (k) {
                 case PresentationQuery.PRESENTATION_QUERY_DEFINITION_PROPERTY ->
                         bldr.presentationDefinition(readPresentationDefinition(v, context));
                 case PresentationQuery.PRESENTATION_QUERY_SCOPE_PROPERTY ->

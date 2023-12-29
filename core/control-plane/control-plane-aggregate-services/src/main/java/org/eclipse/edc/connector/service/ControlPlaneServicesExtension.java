@@ -8,12 +8,14 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.connector.service;
 
+import java.time.Clock;
 import org.eclipse.edc.catalog.spi.DataServiceRegistry;
 import org.eclipse.edc.catalog.spi.DatasetResolver;
 import org.eclipse.edc.connector.asset.spi.observe.AssetObservableImpl;
@@ -67,142 +69,138 @@ import org.eclipse.edc.spi.telemetry.Telemetry;
 import org.eclipse.edc.transaction.spi.TransactionContext;
 import org.eclipse.edc.validator.spi.DataAddressValidatorRegistry;
 
-import java.time.Clock;
-
 @Extension(ControlPlaneServicesExtension.NAME)
 public class ControlPlaneServicesExtension implements ServiceExtension {
 
-    public static final String NAME = "Control Plane Services";
+  public static final String NAME = "Control Plane Services";
 
-    @Inject
-    private Clock clock;
+  @Inject private Clock clock;
 
-    @Inject
-    private Monitor monitor;
+  @Inject private Monitor monitor;
 
-    @Inject
-    private EventRouter eventRouter;
+  @Inject private EventRouter eventRouter;
 
-    @Inject
-    private RemoteMessageDispatcherRegistry dispatcher;
+  @Inject private RemoteMessageDispatcherRegistry dispatcher;
 
-    @Inject
-    private AssetIndex assetIndex;
+  @Inject private AssetIndex assetIndex;
 
-    @Inject
-    private ContractDefinitionStore contractDefinitionStore;
+  @Inject private ContractDefinitionStore contractDefinitionStore;
 
-    @Inject
-    private ContractNegotiationStore contractNegotiationStore;
+  @Inject private ContractNegotiationStore contractNegotiationStore;
 
-    @Inject
-    private ConsumerContractNegotiationManager consumerContractNegotiationManager;
+  @Inject
+  private ConsumerContractNegotiationManager consumerContractNegotiationManager;
 
-    @Inject
-    private PolicyDefinitionStore policyDefinitionStore;
+  @Inject private PolicyDefinitionStore policyDefinitionStore;
 
-    @Inject
-    private TransferProcessStore transferProcessStore;
+  @Inject private TransferProcessStore transferProcessStore;
 
-    @Inject
-    private TransferProcessManager transferProcessManager;
+  @Inject private TransferProcessManager transferProcessManager;
 
-    @Inject
-    private TransactionContext transactionContext;
+  @Inject private TransactionContext transactionContext;
 
-    @Inject
-    private ContractValidationService contractValidationService;
+  @Inject private ContractValidationService contractValidationService;
 
-    @Inject
-    private ContractNegotiationObservable contractNegotiationObservable;
+  @Inject private ContractNegotiationObservable contractNegotiationObservable;
 
-    @Inject
-    private TransferProcessObservable transferProcessObservable;
+  @Inject private TransferProcessObservable transferProcessObservable;
 
-    @Inject
-    private Telemetry telemetry;
+  @Inject private Telemetry telemetry;
 
-    @Inject
-    private ParticipantAgentService participantAgentService;
+  @Inject private ParticipantAgentService participantAgentService;
 
-    @Inject
-    private DataServiceRegistry dataServiceRegistry;
+  @Inject private DataServiceRegistry dataServiceRegistry;
 
-    @Inject
-    private DatasetResolver datasetResolver;
+  @Inject private DatasetResolver datasetResolver;
 
-    @Inject
-    private CommandHandlerRegistry commandHandlerRegistry;
+  @Inject private CommandHandlerRegistry commandHandlerRegistry;
 
-    @Inject
-    private DataAddressValidatorRegistry dataAddressValidator;
+  @Inject private DataAddressValidatorRegistry dataAddressValidator;
 
-    @Inject
-    private IdentityService identityService;
+  @Inject private IdentityService identityService;
 
-    @Override
-    public String name() {
-        return NAME;
-    }
+  @Override
+  public String name() {
+    return NAME;
+  }
 
-    @Provider
-    public AssetService assetService() {
-        var assetObservable = new AssetObservableImpl();
-        assetObservable.registerListener(new AssetEventListener(clock, eventRouter));
-        return new AssetServiceImpl(assetIndex, contractNegotiationStore, transactionContext, assetObservable, dataAddressValidator);
-    }
+  @Provider
+  public AssetService assetService() {
+    var assetObservable = new AssetObservableImpl();
+    assetObservable.registerListener(
+        new AssetEventListener(clock, eventRouter));
+    return new AssetServiceImpl(assetIndex, contractNegotiationStore,
+                                transactionContext, assetObservable,
+                                dataAddressValidator);
+  }
 
-    @Provider
-    public CatalogService catalogService() {
-        return new CatalogServiceImpl(dispatcher);
-    }
+  @Provider
+  public CatalogService catalogService() {
+    return new CatalogServiceImpl(dispatcher);
+  }
 
-    @Provider
-    public CatalogProtocolService catalogProtocolService(ServiceExtensionContext context) {
-        return new CatalogProtocolServiceImpl(datasetResolver, participantAgentService, dataServiceRegistry,
-                identityService, monitor, context.getParticipantId(), transactionContext);
-    }
+  @Provider
+  public CatalogProtocolService
+  catalogProtocolService(ServiceExtensionContext context) {
+    return new CatalogProtocolServiceImpl(
+        datasetResolver, participantAgentService, dataServiceRegistry,
+        identityService, monitor, context.getParticipantId(),
+        transactionContext);
+  }
 
-    @Provider
-    public ContractAgreementService contractAgreementService() {
-        return new ContractAgreementServiceImpl(contractNegotiationStore, transactionContext);
-    }
+  @Provider
+  public ContractAgreementService contractAgreementService() {
+    return new ContractAgreementServiceImpl(contractNegotiationStore,
+                                            transactionContext);
+  }
 
-    @Provider
-    public ContractDefinitionService contractDefinitionService() {
-        var contractDefinitionObservable = new ContractDefinitionObservableImpl();
-        contractDefinitionObservable.registerListener(new ContractDefinitionEventListener(clock, eventRouter));
-        return new ContractDefinitionServiceImpl(contractDefinitionStore, transactionContext, contractDefinitionObservable);
-    }
+  @Provider
+  public ContractDefinitionService contractDefinitionService() {
+    var contractDefinitionObservable = new ContractDefinitionObservableImpl();
+    contractDefinitionObservable.registerListener(
+        new ContractDefinitionEventListener(clock, eventRouter));
+    return new ContractDefinitionServiceImpl(contractDefinitionStore,
+                                             transactionContext,
+                                             contractDefinitionObservable);
+  }
 
-    @Provider
-    public ContractNegotiationService contractNegotiationService() {
-        return new ContractNegotiationServiceImpl(contractNegotiationStore, consumerContractNegotiationManager, transactionContext, commandHandlerRegistry);
-    }
+  @Provider
+  public ContractNegotiationService contractNegotiationService() {
+    return new ContractNegotiationServiceImpl(
+        contractNegotiationStore, consumerContractNegotiationManager,
+        transactionContext, commandHandlerRegistry);
+  }
 
-    @Provider
-    public ContractNegotiationProtocolService contractNegotiationProtocolService() {
-        return new ContractNegotiationProtocolServiceImpl(contractNegotiationStore,
-                transactionContext, contractValidationService, identityService, contractNegotiationObservable,
-                monitor, telemetry);
-    }
+  @Provider
+  public ContractNegotiationProtocolService
+  contractNegotiationProtocolService() {
+    return new ContractNegotiationProtocolServiceImpl(
+        contractNegotiationStore, transactionContext, contractValidationService,
+        identityService, contractNegotiationObservable, monitor, telemetry);
+  }
 
-    @Provider
-    public PolicyDefinitionService policyDefinitionService() {
-        var policyDefinitionObservable = new PolicyDefinitionObservableImpl();
-        policyDefinitionObservable.registerListener(new PolicyDefinitionEventListener(clock, eventRouter));
-        return new PolicyDefinitionServiceImpl(transactionContext, policyDefinitionStore, contractDefinitionStore, policyDefinitionObservable);
-    }
+  @Provider
+  public PolicyDefinitionService policyDefinitionService() {
+    var policyDefinitionObservable = new PolicyDefinitionObservableImpl();
+    policyDefinitionObservable.registerListener(
+        new PolicyDefinitionEventListener(clock, eventRouter));
+    return new PolicyDefinitionServiceImpl(
+        transactionContext, policyDefinitionStore, contractDefinitionStore,
+        policyDefinitionObservable);
+  }
 
-    @Provider
-    public TransferProcessService transferProcessService() {
-        return new TransferProcessServiceImpl(transferProcessStore, transferProcessManager, transactionContext,
-                dataAddressValidator, commandHandlerRegistry);
-    }
+  @Provider
+  public TransferProcessService transferProcessService() {
+    return new TransferProcessServiceImpl(
+        transferProcessStore, transferProcessManager, transactionContext,
+        dataAddressValidator, commandHandlerRegistry);
+  }
 
-    @Provider
-    public TransferProcessProtocolService transferProcessProtocolService() {
-        return new TransferProcessProtocolServiceImpl(transferProcessStore, transactionContext, contractNegotiationStore,
-                contractValidationService, identityService, dataAddressValidator, transferProcessObservable, clock, monitor, telemetry);
-    }
+  @Provider
+  public TransferProcessProtocolService transferProcessProtocolService() {
+    return new TransferProcessProtocolServiceImpl(
+        transferProcessStore, transactionContext, contractNegotiationStore,
+        contractValidationService, identityService, dataAddressValidator,
+        transferProcessObservable, clock, monitor, telemetry);
+  }
 }

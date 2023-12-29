@@ -8,11 +8,15 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.connector.service.catalog;
+
+import static java.lang.String.format;
+import static org.eclipse.edc.spi.CoreConstants.EDC_NAMESPACE;
 
 import org.eclipse.edc.catalog.spi.Catalog;
 import org.eclipse.edc.catalog.spi.CatalogRequestMessage;
@@ -29,64 +33,71 @@ import org.eclipse.edc.spi.result.ServiceResult;
 import org.eclipse.edc.transaction.spi.TransactionContext;
 import org.jetbrains.annotations.NotNull;
 
-import static java.lang.String.format;
-import static org.eclipse.edc.spi.CoreConstants.EDC_NAMESPACE;
+public class CatalogProtocolServiceImpl
+    extends BaseProtocolService implements CatalogProtocolService {
 
-public class CatalogProtocolServiceImpl extends BaseProtocolService implements CatalogProtocolService {
+  private static final String PARTICIPANT_ID_PROPERTY_KEY = "participantId";
 
-    private static final String PARTICIPANT_ID_PROPERTY_KEY = "participantId";
+  private final DatasetResolver datasetResolver;
+  private final ParticipantAgentService participantAgentService;
+  private final DataServiceRegistry dataServiceRegistry;
+  private final String participantId;
+  private final TransactionContext transactionContext;
 
-    private final DatasetResolver datasetResolver;
-    private final ParticipantAgentService participantAgentService;
-    private final DataServiceRegistry dataServiceRegistry;
-    private final String participantId;
-    private final TransactionContext transactionContext;
+  public CatalogProtocolServiceImpl(
+      DatasetResolver datasetResolver,
+      ParticipantAgentService participantAgentService,
+      DataServiceRegistry dataServiceRegistry, IdentityService identityService,
+      Monitor monitor, String participantId,
+      TransactionContext transactionContext) {
+    super(identityService, monitor);
+    this.datasetResolver = datasetResolver;
+    this.participantAgentService = participantAgentService;
+    this.dataServiceRegistry = dataServiceRegistry;
+    this.participantId = participantId;
+    this.transactionContext = transactionContext;
+  }
 
-    public CatalogProtocolServiceImpl(DatasetResolver datasetResolver,
-                                      ParticipantAgentService participantAgentService,
-                                      DataServiceRegistry dataServiceRegistry,
-                                      IdentityService identityService,
-                                      Monitor monitor,
-                                      String participantId,
-                                      TransactionContext transactionContext) {
-        super(identityService, monitor);
-        this.datasetResolver = datasetResolver;
-        this.participantAgentService = participantAgentService;
-        this.dataServiceRegistry = dataServiceRegistry;
-        this.participantId = participantId;
-        this.transactionContext = transactionContext;
-    }
+  @Override
+  @NotNull
+  public ServiceResult<Catalog>
+  getCatalog(CatalogRequestMessage message,
+             TokenRepresentation tokenRepresentation) {
+    return transactionContext.execute(
+        ()
+            -> verifyToken(tokenRepresentation)
+                   .map(participantAgentService::createFor)
+                   .map(agent -> {
+                     try (var datasets = datasetResolver.query(
+                              agent, message.getQuerySpec())) {
+                       var dataServices = dataServiceRegistry.getDataServices();
 
-    @Override
-    @NotNull
-    public ServiceResult<Catalog> getCatalog(CatalogRequestMessage message, TokenRepresentation tokenRepresentation) {
-        return transactionContext.execute(() -> verifyToken(tokenRepresentation)
-                .map(participantAgentService::createFor)
-                .map(agent -> {
-                    try (var datasets = datasetResolver.query(agent, message.getQuerySpec())) {
-                        var dataServices = dataServiceRegistry.getDataServices();
+                       return Catalog.Builder.newInstance()
+                           .dataServices(dataServices)
+                           .datasets(datasets.toList())
+                           .property(EDC_NAMESPACE +
+                                         PARTICIPANT_ID_PROPERTY_KEY,
+                                     participantId)
+                           .build();
+                     }
+                   }));
+  }
 
-                        return Catalog.Builder.newInstance()
-                                .dataServices(dataServices)
-                                .datasets(datasets.toList())
-                                .property(EDC_NAMESPACE + PARTICIPANT_ID_PROPERTY_KEY, participantId)
-                                .build();
-                    }
-                })
-        );
-    }
+  @Override
+  public @NotNull ServiceResult<Dataset>
+  getDataset(String datasetId, TokenRepresentation tokenRepresentation) {
+    return transactionContext.execute(
+        ()
+            -> verifyToken(tokenRepresentation)
+                   .map(participantAgentService::createFor)
+                   .map(agent -> datasetResolver.getById(agent, datasetId))
+                   .compose(dataset -> {
+                     if (dataset == null) {
+                       return ServiceResult.notFound(
+                           format("Dataset %s does not exist", datasetId));
+                     }
 
-    @Override
-    public @NotNull ServiceResult<Dataset> getDataset(String datasetId, TokenRepresentation tokenRepresentation) {
-        return transactionContext.execute(() -> verifyToken(tokenRepresentation)
-                .map(participantAgentService::createFor)
-                .map(agent -> datasetResolver.getById(agent, datasetId))
-                .compose(dataset -> {
-                    if (dataset == null) {
-                        return ServiceResult.notFound(format("Dataset %s does not exist", datasetId));
-                    }
-
-                    return ServiceResult.success(dataset);
-                }));
-    }
+                     return ServiceResult.success(dataset);
+                   }));
+  }
 }

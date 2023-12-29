@@ -14,15 +14,6 @@
 
 package org.eclipse.edc.sql.datasource;
 
-import org.eclipse.edc.sql.ConnectionFactory;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.util.Properties;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -32,87 +23,103 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.util.Properties;
+import org.eclipse.edc.sql.ConnectionFactory;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
 class ConnectionFactoryDataSourceTest {
 
-    private final ConnectionFactory connectionFactory = mock();
-    private final Connection connection = mock();
-    private final ConnectionFactoryDataSource connectionFactoryDataSource = new ConnectionFactoryDataSource(
-            connectionFactory, "jdbcUrl", new Properties());
+  private final ConnectionFactory connectionFactory = mock();
+  private final Connection connection = mock();
+  private final ConnectionFactoryDataSource connectionFactoryDataSource =
+      new ConnectionFactoryDataSource(connectionFactory, "jdbcUrl",
+                                      new Properties());
 
-    @Test
-    void getConnection() throws SQLException {
-        when(connectionFactory.create(any(), any())).thenReturn(connection);
+  @Test
+  void getConnection() throws SQLException {
+    when(connectionFactory.create(any(), any())).thenReturn(connection);
 
-        var result = connectionFactoryDataSource.getConnection();
+    var result = connectionFactoryDataSource.getConnection();
 
-        assertThat(result).isSameAs(connection);
-        verify(connectionFactory, times(1)).create(any(), any());
-    }
+    assertThat(result).isSameAs(connection);
+    verify(connectionFactory, times(1)).create(any(), any());
+  }
 
-    @Test
-    void getConnectionWithArgument() throws SQLException {
-        when(connectionFactory.create(any(), any())).thenReturn(connection);
+  @Test
+  void getConnectionWithArgument() throws SQLException {
+    when(connectionFactory.create(any(), any())).thenReturn(connection);
 
-        var result = connectionFactoryDataSource.getConnection(null, null);
+    var result = connectionFactoryDataSource.getConnection(null, null);
 
-        assertThat(result).isSameAs(connection);
-        verify(connectionFactory, times(1)).create(any(), any());
-    }
+    assertThat(result).isSameAs(connection);
+    verify(connectionFactory, times(1)).create(any(), any());
+  }
 
-    @Test
-    void getLogWriter() {
-        assertThrows(SQLFeatureNotSupportedException.class, connectionFactoryDataSource::getLogWriter);
+  @Test
+  void getLogWriter() {
+    assertThrows(SQLFeatureNotSupportedException.class,
+                 connectionFactoryDataSource::getLogWriter);
 
-        verifyNoInteractions(connectionFactory);
-    }
+    verifyNoInteractions(connectionFactory);
+  }
 
-    @Test
-    void setLogWriter() {
-        assertThrows(SQLFeatureNotSupportedException.class, () -> connectionFactoryDataSource.setLogWriter(mock()));
+  @Test
+  void setLogWriter() {
+    assertThrows(SQLFeatureNotSupportedException.class,
+                 () -> connectionFactoryDataSource.setLogWriter(mock()));
 
-        verifyNoInteractions(connectionFactory);
-    }
+    verifyNoInteractions(connectionFactory);
+  }
 
-    @Test
-    void setLoginTimeout() {
-        assertThrows(SQLFeatureNotSupportedException.class, () -> connectionFactoryDataSource.setLoginTimeout(1));
+  @Test
+  void setLoginTimeout() {
+    assertThrows(SQLFeatureNotSupportedException.class,
+                 () -> connectionFactoryDataSource.setLoginTimeout(1));
 
-        verifyNoInteractions(connectionFactory);
-    }
+    verifyNoInteractions(connectionFactory);
+  }
 
-    @Test
-    void getLoginTimeout() {
-        assertThrows(SQLFeatureNotSupportedException.class, connectionFactoryDataSource::getLoginTimeout);
+  @Test
+  void getLoginTimeout() {
+    assertThrows(SQLFeatureNotSupportedException.class,
+                 connectionFactoryDataSource::getLoginTimeout);
 
-        verifyNoInteractions(connectionFactory);
-    }
+    verifyNoInteractions(connectionFactory);
+  }
 
-    @Test
-    void getParentLogger() {
-        assertThrows(SQLFeatureNotSupportedException.class, connectionFactoryDataSource::getParentLogger);
+  @Test
+  void getParentLogger() {
+    assertThrows(SQLFeatureNotSupportedException.class,
+                 connectionFactoryDataSource::getParentLogger);
 
-        verifyNoInteractions(connectionFactory);
-    }
+    verifyNoInteractions(connectionFactory);
+  }
 
-    @Test
-    void unwrap() {
-        assertThrows(SQLFeatureNotSupportedException.class, () -> connectionFactoryDataSource.unwrap(Class.class));
+  @Test
+  void unwrap() {
+    assertThrows(SQLFeatureNotSupportedException.class,
+                 () -> connectionFactoryDataSource.unwrap(Class.class));
 
-        verifyNoInteractions(connectionFactory);
-    }
+    verifyNoInteractions(connectionFactory);
+  }
 
-    @Test
-    void isWrapperFor() throws SQLException {
-        var result = connectionFactoryDataSource.isWrapperFor(Class.class);
+  @Test
+  void isWrapperFor() throws SQLException {
+    var result = connectionFactoryDataSource.isWrapperFor(Class.class);
 
-        Assertions.assertFalse(result);
+    Assertions.assertFalse(result);
 
-        verifyNoInteractions(connectionFactory);
-    }
+    verifyNoInteractions(connectionFactory);
+  }
 
-    @Test
-    void createConnectionBuilder() {
-        assertThrows(SQLFeatureNotSupportedException.class, connectionFactoryDataSource::createConnectionBuilder);
-        verifyNoInteractions(connectionFactory);
-    }
+  @Test
+  void createConnectionBuilder() {
+    assertThrows(SQLFeatureNotSupportedException.class,
+                 connectionFactoryDataSource::createConnectionBuilder);
+    verifyNoInteractions(connectionFactory);
+  }
 }

@@ -8,7 +8,8 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
@@ -26,30 +27,30 @@ import org.eclipse.edc.spi.system.ServiceExtensionContext;
 @Extension(value = CatalogDefaultServicesExtension.NAME)
 public class CatalogDefaultServicesExtension implements ServiceExtension {
 
-    public static final String NAME = "Catalog Default Services";
+  public static final String NAME = "Catalog Default Services";
 
-    @Inject
-    private DataFlowManager dataFlowManager;
-    
-    private DataServiceRegistry dataServiceRegistry;
+  @Inject private DataFlowManager dataFlowManager;
 
-    @Override
-    public String name() {
-        return NAME;
-    }
-    
-    @Override
-    public void initialize(ServiceExtensionContext context) {
-        dataServiceRegistry = new DataServiceRegistryImpl();
-    }
-    
-    @Provider
-    public DataServiceRegistry dataServiceRegistry() {
-        return dataServiceRegistry;
-    }
+  private DataServiceRegistry dataServiceRegistry;
 
-    @Provider(isDefault = true)
-    public DistributionResolver distributionResolver() {
-        return new DefaultDistributionResolver(dataServiceRegistry, dataFlowManager);
-    }
+  @Override
+  public String name() {
+    return NAME;
+  }
+
+  @Override
+  public void initialize(ServiceExtensionContext context) {
+    dataServiceRegistry = new DataServiceRegistryImpl();
+  }
+
+  @Provider
+  public DataServiceRegistry dataServiceRegistry() {
+    return dataServiceRegistry;
+  }
+
+  @Provider(isDefault = true)
+  public DistributionResolver distributionResolver() {
+    return new DefaultDistributionResolver(dataServiceRegistry,
+                                           dataFlowManager);
+  }
 }

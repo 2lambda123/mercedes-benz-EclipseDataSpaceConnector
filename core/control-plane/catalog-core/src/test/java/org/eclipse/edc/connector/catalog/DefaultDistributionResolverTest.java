@@ -8,12 +8,20 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.connector.catalog;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Set;
 import org.eclipse.edc.catalog.spi.DataService;
 import org.eclipse.edc.catalog.spi.DataServiceRegistry;
 import org.eclipse.edc.connector.transfer.spi.flow.DataFlowManager;
@@ -21,40 +29,37 @@ import org.eclipse.edc.spi.types.domain.DataAddress;
 import org.eclipse.edc.spi.types.domain.asset.Asset;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 class DefaultDistributionResolverTest {
 
-    private final DataService dataService = DataService.Builder.newInstance().build();
-    private final DataServiceRegistry dataServiceRegistry = mock();
-    private final DataFlowManager dataFlowManager = mock();
+  private final DataService dataService =
+      DataService.Builder.newInstance().build();
+  private final DataServiceRegistry dataServiceRegistry = mock();
+  private final DataFlowManager dataFlowManager = mock();
 
-    private final DefaultDistributionResolver resolver = new DefaultDistributionResolver(dataServiceRegistry, dataFlowManager);
+  private final DefaultDistributionResolver resolver =
+      new DefaultDistributionResolver(dataServiceRegistry, dataFlowManager);
 
-    @Test
-    void shouldReturnDistributionsForEveryTransferType() {
-        when(dataServiceRegistry.getDataServices()).thenReturn(List.of(dataService));
-        when(dataFlowManager.transferTypesFor(any())).thenReturn(Set.of("type1", "type2"));
+  @Test
+  void shouldReturnDistributionsForEveryTransferType() {
+    when(dataServiceRegistry.getDataServices())
+        .thenReturn(List.of(dataService));
+    when(dataFlowManager.transferTypesFor(any()))
+        .thenReturn(Set.of("type1", "type2"));
 
-        var dataAddress = DataAddress.Builder.newInstance().type("any").build();
-        var asset = Asset.Builder.newInstance().dataAddress(dataAddress).build();
+    var dataAddress = DataAddress.Builder.newInstance().type("any").build();
+    var asset = Asset.Builder.newInstance().dataAddress(dataAddress).build();
 
-        var distributions = resolver.getDistributions(asset);
+    var distributions = resolver.getDistributions(asset);
 
-        assertThat(distributions).hasSize(2)
-                .anySatisfy(distribution -> {
-                    assertThat(distribution.getFormat()).isEqualTo("type1");
-                    assertThat(distribution.getDataService()).isSameAs(dataService);
-                })
-                .anySatisfy(distribution -> {
-                    assertThat(distribution.getFormat()).isEqualTo("type2");
-                    assertThat(distribution.getDataService()).isSameAs(dataService);
-                });
-    }
+    assertThat(distributions)
+        .hasSize(2)
+        .anySatisfy(distribution -> {
+          assertThat(distribution.getFormat()).isEqualTo("type1");
+          assertThat(distribution.getDataService()).isSameAs(dataService);
+        })
+        .anySatisfy(distribution -> {
+          assertThat(distribution.getFormat()).isEqualTo("type2");
+          assertThat(distribution.getDataService()).isSameAs(dataService);
+        });
+  }
 }

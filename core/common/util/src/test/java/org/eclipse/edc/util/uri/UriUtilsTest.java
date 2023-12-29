@@ -8,28 +8,28 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.util.uri;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class UriUtilsTest {
 
-    @Test
-    void verifyEquality() {
-        var u1 = URI.create("https://some.url/path/foo#position1");
-        var u2 = URI.create("https://some.url/path/foo");
-        assertThat(UriUtils.equalsIgnoreFragment(u1, u2)).isTrue();
+  @Test
+  void verifyEquality() {
+    var u1 = URI.create("https://some.url/path/foo#position1");
+    var u2 = URI.create("https://some.url/path/foo");
+    assertThat(UriUtils.equalsIgnoreFragment(u1, u2)).isTrue();
 
-        var u3 = URI.create("https://some.url/path");
-        assertThat(UriUtils.equalsIgnoreFragment(u1, u3)).isFalse();
-        assertThat(UriUtils.equalsIgnoreFragment(u2, u3)).isFalse();
-    }
+    var u3 = URI.create("https://some.url/path");
+    assertThat(UriUtils.equalsIgnoreFragment(u1, u3)).isFalse();
+    assertThat(UriUtils.equalsIgnoreFragment(u2, u3)).isFalse();
+  }
 }

@@ -8,15 +8,21 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.protocol.dsp.message;
 
+import static org.eclipse.edc.protocol.dsp.spi.error.DspErrorResponse.type;
+import static org.eclipse.edc.protocol.dsp.spi.types.HttpMessageProtocol.DATASPACE_PROTOCOL_HTTP;
+
 import jakarta.json.JsonObject;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.util.Objects;
+import java.util.UUID;
 import org.eclipse.edc.protocol.dsp.spi.message.DspRequestHandler;
 import org.eclipse.edc.protocol.dsp.spi.message.GetDspRequest;
 import org.eclipse.edc.protocol.dsp.spi.message.PostDspRequest;
@@ -28,135 +34,199 @@ import org.eclipse.edc.spi.types.domain.message.RemoteMessage;
 import org.eclipse.edc.transform.spi.TypeTransformerRegistry;
 import org.eclipse.edc.validator.spi.JsonObjectValidatorRegistry;
 
-import java.util.Objects;
-import java.util.UUID;
-
-import static org.eclipse.edc.protocol.dsp.spi.error.DspErrorResponse.type;
-import static org.eclipse.edc.protocol.dsp.spi.types.HttpMessageProtocol.DATASPACE_PROTOCOL_HTTP;
-
 public class DspRequestHandlerImpl implements DspRequestHandler {
 
-    private final Monitor monitor;
-    private final JsonObjectValidatorRegistry validatorRegistry;
-    private final TypeTransformerRegistry transformerRegistry;
+  private final Monitor monitor;
+  private final JsonObjectValidatorRegistry validatorRegistry;
+  private final TypeTransformerRegistry transformerRegistry;
 
-    public DspRequestHandlerImpl(Monitor monitor, JsonObjectValidatorRegistry validatorRegistry, TypeTransformerRegistry transformerRegistry) {
-        this.monitor = monitor;
-        this.validatorRegistry = validatorRegistry;
-        this.transformerRegistry = transformerRegistry;
+  public DspRequestHandlerImpl(Monitor monitor,
+                               JsonObjectValidatorRegistry validatorRegistry,
+                               TypeTransformerRegistry transformerRegistry) {
+    this.monitor = monitor;
+    this.validatorRegistry = validatorRegistry;
+    this.transformerRegistry = transformerRegistry;
+  }
+
+  @Override
+  public <R> Response getResource(GetDspRequest<R> request) {
+    monitor.debug(
+        ()
+            -> "DSP: Incoming resource request for %s id %s".formatted(
+                request.getResultClass(), request.getId()));
+
+    var tokenRepresentation = TokenRepresentation.Builder.newInstance()
+                                  .token(request.getToken())
+                                  .build();
+
+    var serviceResult =
+        request.getServiceCall().apply(request.getId(), tokenRepresentation);
+    if (serviceResult.failed()) {
+      monitor.debug(()
+                        -> "DSP: Service call failed: %s".formatted(
+                            serviceResult.getFailureDetail()));
+      return type(request.getErrorType())
+          .processId(request.getId())
+          .from(serviceResult.getFailure());
     }
 
-    @Override
-    public <R> Response getResource(GetDspRequest<R> request) {
-        monitor.debug(() -> "DSP: Incoming resource request for %s id %s".formatted(request.getResultClass(), request.getId()));
+    var resource = serviceResult.getContent();
 
-        var tokenRepresentation = TokenRepresentation.Builder.newInstance().token(request.getToken()).build();
-
-        var serviceResult = request.getServiceCall().apply(request.getId(), tokenRepresentation);
-        if (serviceResult.failed()) {
-            monitor.debug(() -> "DSP: Service call failed: %s".formatted(serviceResult.getFailureDetail()));
-            return type(request.getErrorType()).processId(request.getId()).from(serviceResult.getFailure());
-        }
-
-        var resource = serviceResult.getContent();
-
-        var transformation = transformerRegistry.transform(resource, JsonObject.class);
-        if (transformation.failed()) {
-            var errorCode = UUID.randomUUID();
-            monitor.warning("Error transforming %s, error id %s: %s".formatted(request.getResultClass().getSimpleName(), errorCode, transformation.getFailureDetail()));
-            return type(request.getErrorType()).processId(request.getId()).message(String.format("Error code %s", errorCode)).internalServerError();
-        }
-
-        return Response.ok().type(MediaType.APPLICATION_JSON).entity(transformation.getContent()).build();
+    var transformation =
+        transformerRegistry.transform(resource, JsonObject.class);
+    if (transformation.failed()) {
+      var errorCode = UUID.randomUUID();
+      monitor.warning("Error transforming %s, error id %s: %s".formatted(
+          request.getResultClass().getSimpleName(), errorCode,
+          transformation.getFailureDetail()));
+      return type(request.getErrorType())
+          .processId(request.getId())
+          .message(String.format("Error code %s", errorCode))
+          .internalServerError();
     }
 
-    @Override
-    public <I extends RemoteMessage, R> Response createResource(PostDspRequest<I, R> request) {
-        monitor.debug(() -> "DSP: Incoming %s for %s process%s".formatted(
-                request.getInputClass().getSimpleName(),
-                request.getResultClass(),
-                request.getProcessId() != null ? ": " + request.getProcessId() : ""));
+    return Response.ok()
+        .type(MediaType.APPLICATION_JSON)
+        .entity(transformation.getContent())
+        .build();
+  }
 
-        var tokenRepresentation = TokenRepresentation.Builder.newInstance().token(request.getToken()).build();
+  @Override
+  public <I extends RemoteMessage, R>
+      Response createResource(PostDspRequest<I, R> request) {
+    monitor.debug(()
+                      -> "DSP: Incoming %s for %s process%s".formatted(
+                          request.getInputClass().getSimpleName(),
+                          request.getResultClass(),
+                          request.getProcessId() != null
+                              ? ": " + request.getProcessId()
+                              : ""));
 
-        var validation = validatorRegistry.validate(request.getExpectedMessageType(), request.getMessage());
-        if (validation.failed()) {
-            monitor.debug(() -> "DSP: Validation failed: %s".formatted(validation.getFailureMessages()));
-            return type(request.getErrorType()).badRequest();
-        }
+    var tokenRepresentation = TokenRepresentation.Builder.newInstance()
+                                  .token(request.getToken())
+                                  .build();
 
-        var inputTransformation = transformerRegistry.transform(request.getMessage(), request.getInputClass())
-                .compose(message -> {
-                    if (message instanceof ProcessRemoteMessage processRemoteMessage) {
-                        processRemoteMessage.setProtocol(DATASPACE_PROTOCOL_HTTP);
-                    }
-                    return Result.success(message);
-                });
-
-        if (inputTransformation.failed()) {
-            monitor.debug(() -> "DSP: Transformation failed: %s".formatted(inputTransformation.getFailureMessages()));
-            return type(request.getErrorType()).badRequest();
-        }
-
-        var serviceResult = request.getServiceCall().apply(inputTransformation.getContent(), tokenRepresentation);
-        if (serviceResult.failed()) {
-            monitor.debug(() -> "DSP: Service call failed: %s".formatted(serviceResult.getFailureDetail()));
-            return type(request.getErrorType()).from(serviceResult.getFailure());
-        }
-
-        var resource = serviceResult.getContent();
-
-        var outputTransformation = transformerRegistry.transform(resource, JsonObject.class);
-        if (outputTransformation.failed()) {
-            var errorCode = UUID.randomUUID();
-            monitor.warning("Error transforming %s, error id %s: %s".formatted(request.getResultClass().getSimpleName(), errorCode, outputTransformation.getFailureDetail()));
-            return type(request.getErrorType()).message("Error code %s".formatted(errorCode)).internalServerError();
-        }
-
-        return Response.ok().type(MediaType.APPLICATION_JSON).entity(outputTransformation.getContent()).build();
+    var validation = validatorRegistry.validate(
+        request.getExpectedMessageType(), request.getMessage());
+    if (validation.failed()) {
+      monitor.debug(()
+                        -> "DSP: Validation failed: %s".formatted(
+                            validation.getFailureMessages()));
+      return type(request.getErrorType()).badRequest();
     }
 
-    @Override
-    public <I extends RemoteMessage, R> Response updateResource(PostDspRequest<I, R> request) {
-        monitor.debug(() -> "DSP: Incoming %s for %s process%s".formatted(
-                request.getInputClass().getSimpleName(),
-                request.getResultClass(),
-                request.getProcessId() != null ? ": " + request.getProcessId() : ""));
+    var inputTransformation =
+        transformerRegistry
+            .transform(request.getMessage(), request.getInputClass())
+            .compose(message -> {
+              if (message instanceof
+                  ProcessRemoteMessage processRemoteMessage) {
+                processRemoteMessage.setProtocol(DATASPACE_PROTOCOL_HTTP);
+              }
+              return Result.success(message);
+            });
 
-        var tokenRepresentation = TokenRepresentation.Builder.newInstance().token(request.getToken()).build();
-
-        var validation = validatorRegistry.validate(request.getExpectedMessageType(), request.getMessage());
-        if (validation.failed()) {
-            monitor.debug(() -> "DSP: Validation failed: %s".formatted(validation.getFailureMessages()));
-            return type(request.getErrorType()).processId(request.getProcessId()).badRequest();
-        }
-
-        var inputTransformation = transformerRegistry.transform(request.getMessage(), request.getInputClass())
-                .compose(message -> {
-                    if (message instanceof ProcessRemoteMessage processRemoteMessage) {
-                        processRemoteMessage.setProtocol(DATASPACE_PROTOCOL_HTTP);
-
-                        return Objects.equals(request.getProcessId(), processRemoteMessage.getProcessId())
-                                ? Result.success(message)
-                                : Result.failure("DSP: Invalid process ID. Expected: %s, actual: %s"
-                                .formatted(request.getProcessId(), processRemoteMessage.getProcessId()));
-                    } else {
-                        return Result.success(message);
-                    }
-                });
-
-        if (inputTransformation.failed()) {
-            monitor.debug(() -> "DSP: Transformation failed: %s".formatted(validation.getFailureMessages()));
-            return type(request.getErrorType()).processId(request.getProcessId()).badRequest();
-        }
-
-        return request.getServiceCall()
-                .apply(inputTransformation.getContent(), tokenRepresentation)
-                .map(it -> Response.ok().type(MediaType.APPLICATION_JSON_TYPE).build())
-                .orElse(failure -> {
-                    monitor.debug(() -> "DSP: Service call failed: %s".formatted(failure.getFailureDetail()));
-                    return type(request.getErrorType()).processId(request.getProcessId()).from(failure);
-                });
+    if (inputTransformation.failed()) {
+      monitor.debug(()
+                        -> "DSP: Transformation failed: %s".formatted(
+                            inputTransformation.getFailureMessages()));
+      return type(request.getErrorType()).badRequest();
     }
 
+    var serviceResult = request.getServiceCall().apply(
+        inputTransformation.getContent(), tokenRepresentation);
+    if (serviceResult.failed()) {
+      monitor.debug(()
+                        -> "DSP: Service call failed: %s".formatted(
+                            serviceResult.getFailureDetail()));
+      return type(request.getErrorType()).from(serviceResult.getFailure());
+    }
+
+    var resource = serviceResult.getContent();
+
+    var outputTransformation =
+        transformerRegistry.transform(resource, JsonObject.class);
+    if (outputTransformation.failed()) {
+      var errorCode = UUID.randomUUID();
+      monitor.warning("Error transforming %s, error id %s: %s".formatted(
+          request.getResultClass().getSimpleName(), errorCode,
+          outputTransformation.getFailureDetail()));
+      return type(request.getErrorType())
+          .message("Error code %s".formatted(errorCode))
+          .internalServerError();
+    }
+
+    return Response.ok()
+        .type(MediaType.APPLICATION_JSON)
+        .entity(outputTransformation.getContent())
+        .build();
+  }
+
+  @Override
+  public <I extends RemoteMessage, R>
+      Response updateResource(PostDspRequest<I, R> request) {
+    monitor.debug(()
+                      -> "DSP: Incoming %s for %s process%s".formatted(
+                          request.getInputClass().getSimpleName(),
+                          request.getResultClass(),
+                          request.getProcessId() != null
+                              ? ": " + request.getProcessId()
+                              : ""));
+
+    var tokenRepresentation = TokenRepresentation.Builder.newInstance()
+                                  .token(request.getToken())
+                                  .build();
+
+    var validation = validatorRegistry.validate(
+        request.getExpectedMessageType(), request.getMessage());
+    if (validation.failed()) {
+      monitor.debug(()
+                        -> "DSP: Validation failed: %s".formatted(
+                            validation.getFailureMessages()));
+      return type(request.getErrorType())
+          .processId(request.getProcessId())
+          .badRequest();
+    }
+
+    var inputTransformation =
+        transformerRegistry
+            .transform(request.getMessage(), request.getInputClass())
+            .compose(message -> {
+              if (message instanceof
+                  ProcessRemoteMessage processRemoteMessage) {
+                processRemoteMessage.setProtocol(DATASPACE_PROTOCOL_HTTP);
+
+                return Objects.equals(request.getProcessId(),
+                                      processRemoteMessage.getProcessId())
+                    ? Result.success(message)
+                    : Result.failure(
+                          "DSP: Invalid process ID. Expected: %s, actual: %s"
+                              .formatted(request.getProcessId(),
+                                         processRemoteMessage.getProcessId()));
+              } else {
+                return Result.success(message);
+              }
+            });
+
+    if (inputTransformation.failed()) {
+      monitor.debug(()
+                        -> "DSP: Transformation failed: %s".formatted(
+                            validation.getFailureMessages()));
+      return type(request.getErrorType())
+          .processId(request.getProcessId())
+          .badRequest();
+    }
+
+    return request.getServiceCall()
+        .apply(inputTransformation.getContent(), tokenRepresentation)
+        .map(it -> Response.ok().type(MediaType.APPLICATION_JSON_TYPE).build())
+        .orElse(failure -> {
+          monitor.debug(()
+                            -> "DSP: Service call failed: %s".formatted(
+                                failure.getFailureDetail()));
+          return type(request.getErrorType())
+              .processId(request.getProcessId())
+              .from(failure);
+        });
+  }
 }

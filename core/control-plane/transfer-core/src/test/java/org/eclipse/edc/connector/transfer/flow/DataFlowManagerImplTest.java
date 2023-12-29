@@ -8,12 +8,23 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - Initial implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - Initial
+ * implementation
  *
  */
 
 package org.eclipse.edc.connector.transfer.flow;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.eclipse.edc.junit.assertions.AbstractResultAssert.assertThat;
+import static org.eclipse.edc.spi.response.ResponseStatus.FATAL_ERROR;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+import java.util.Set;
 import org.eclipse.edc.connector.transfer.spi.flow.DataFlowController;
 import org.eclipse.edc.connector.transfer.spi.types.DataFlowResponse;
 import org.eclipse.edc.connector.transfer.spi.types.DataRequest;
@@ -26,135 +37,156 @@ import org.eclipse.edc.spi.types.domain.asset.Asset;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.eclipse.edc.junit.assertions.AbstractResultAssert.assertThat;
-import static org.eclipse.edc.spi.response.ResponseStatus.FATAL_ERROR;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-
 class DataFlowManagerImplTest {
 
-    private final DataFlowManagerImpl manager = new DataFlowManagerImpl();
+  private final DataFlowManagerImpl manager = new DataFlowManagerImpl();
 
-    @Nested
-    class Initiate {
-        @Test
-        void shouldInitiateFlowOnCorrectController() {
-            var controller = mock(DataFlowController.class);
-            var dataRequest = DataRequest.Builder.newInstance().destinationType("test-dest-type").build();
-            var policy = Policy.Builder.newInstance().build();
-            var dataAddress = DataAddress.Builder.newInstance().type("test-type").build();
-            var transferProcess = TransferProcess.Builder.newInstance().dataRequest(dataRequest).contentDataAddress(dataAddress).build();
+  @Nested
+  class Initiate {
+    @Test
+    void shouldInitiateFlowOnCorrectController() {
+      var controller = mock(DataFlowController.class);
+      var dataRequest = DataRequest.Builder.newInstance()
+                            .destinationType("test-dest-type")
+                            .build();
+      var policy = Policy.Builder.newInstance().build();
+      var dataAddress =
+          DataAddress.Builder.newInstance().type("test-type").build();
+      var transferProcess = TransferProcess.Builder.newInstance()
+                                .dataRequest(dataRequest)
+                                .contentDataAddress(dataAddress)
+                                .build();
 
-            when(controller.canHandle(any())).thenReturn(true);
-            when(controller.initiateFlow(any(), any())).thenReturn(StatusResult.success(DataFlowResponse.Builder.newInstance().build()));
-            manager.register(controller);
+      when(controller.canHandle(any())).thenReturn(true);
+      when(controller.initiateFlow(any(), any()))
+          .thenReturn(StatusResult.success(
+              DataFlowResponse.Builder.newInstance().build()));
+      manager.register(controller);
 
-            var response = manager.initiate(transferProcess, policy);
+      var response = manager.initiate(transferProcess, policy);
 
-            assertThat(response.succeeded()).isTrue();
-        }
-
-        @Test
-        void shouldReturnFatalError_whenNoControllerCanHandleTheRequest() {
-            var controller = mock(DataFlowController.class);
-            var dataRequest = DataRequest.Builder.newInstance().destinationType("test-dest-type").build();
-            var dataAddress = DataAddress.Builder.newInstance().type("test-type").build();
-            var policy = Policy.Builder.newInstance().build();
-            var transferProcess = TransferProcess.Builder.newInstance().dataRequest(dataRequest).contentDataAddress(dataAddress).build();
-
-            when(controller.canHandle(any())).thenReturn(false);
-            manager.register(controller);
-
-            var response = manager.initiate(transferProcess, policy);
-
-            assertThat(response.succeeded()).isFalse();
-            assertThat(response.getFailure().status()).isEqualTo(FATAL_ERROR);
-        }
-
-        @Test
-        void shouldCatchExceptionsAndReturnFatalError() {
-            var controller = mock(DataFlowController.class);
-            var dataRequest = DataRequest.Builder.newInstance().destinationType("test-dest-type").build();
-            var dataAddress = DataAddress.Builder.newInstance().type("test-type").build();
-            var policy = Policy.Builder.newInstance().build();
-            var transferProcess = TransferProcess.Builder.newInstance().dataRequest(dataRequest).contentDataAddress(dataAddress).build();
-
-            var errorMsg = "Test Error Message";
-            when(controller.canHandle(any())).thenReturn(true);
-            when(controller.initiateFlow(any(), any())).thenThrow(new EdcException(errorMsg));
-            manager.register(controller);
-
-            var response = manager.initiate(transferProcess, policy);
-
-            assertThat(response.succeeded()).isFalse();
-            assertThat(response.getFailure().status()).isEqualTo(FATAL_ERROR);
-            assertThat(response.getFailureMessages()).hasSize(1).first().matches(message -> message.contains(errorMsg));
-        }
-
-        @Test
-        void shouldChooseHighestPriorityController() {
-            var highPriority = createDataFlowController();
-            var lowPriority = createDataFlowController();
-            manager.register(1, lowPriority);
-            manager.register(2, highPriority);
-
-            manager.initiate(TransferProcess.Builder.newInstance().build(), Policy.Builder.newInstance().build());
-
-            verify(highPriority).initiateFlow(any(), any());
-            verifyNoInteractions(lowPriority);
-        }
-
-        private DataFlowController createDataFlowController() {
-            var dataFlowController = mock(DataFlowController.class);
-            when(dataFlowController.canHandle(any())).thenReturn(true);
-            when(dataFlowController.initiateFlow(any(), any())).thenReturn(StatusResult.success(DataFlowResponse.Builder.newInstance().build()));
-            return dataFlowController;
-        }
+      assertThat(response.succeeded()).isTrue();
     }
 
-    @Nested
-    class Terminate {
-        @Test
-        void shouldChooseControllerAndTerminate() {
-            var controller = mock(DataFlowController.class);
-            var dataRequest = DataRequest.Builder.newInstance().destinationType("test-dest-type").build();
-            var dataAddress = DataAddress.Builder.newInstance().type("test-type").build();
-            var transferProcess = TransferProcess.Builder.newInstance().dataRequest(dataRequest).contentDataAddress(dataAddress).build();
+    @Test
+    void shouldReturnFatalError_whenNoControllerCanHandleTheRequest() {
+      var controller = mock(DataFlowController.class);
+      var dataRequest = DataRequest.Builder.newInstance()
+                            .destinationType("test-dest-type")
+                            .build();
+      var dataAddress =
+          DataAddress.Builder.newInstance().type("test-type").build();
+      var policy = Policy.Builder.newInstance().build();
+      var transferProcess = TransferProcess.Builder.newInstance()
+                                .dataRequest(dataRequest)
+                                .contentDataAddress(dataAddress)
+                                .build();
 
-            when(controller.canHandle(any())).thenReturn(true);
-            when(controller.terminate(any())).thenReturn(StatusResult.success());
-            manager.register(controller);
+      when(controller.canHandle(any())).thenReturn(false);
+      manager.register(controller);
 
-            var result = manager.terminate(transferProcess);
+      var response = manager.initiate(transferProcess, policy);
 
-            assertThat(result).isSucceeded();
-            verify(controller).terminate(transferProcess);
-        }
+      assertThat(response.succeeded()).isFalse();
+      assertThat(response.getFailure().status()).isEqualTo(FATAL_ERROR);
     }
 
-    @Nested
-    class TransferTypesFor {
-        @Test
-        void shouldReturnTransferTypesFromControllers() {
-            var controllerOne = mock(DataFlowController.class);
-            when(controllerOne.transferTypesFor(any())).thenReturn(Set.of("Type1"));
-            var controllerTwo = mock(DataFlowController.class);
-            when(controllerTwo.transferTypesFor(any())).thenReturn(Set.of("Type2", "Type3"));
-            manager.register(controllerOne);
-            manager.register(controllerTwo);
-            var asset = Asset.Builder.newInstance().build();
+    @Test
+    void shouldCatchExceptionsAndReturnFatalError() {
+      var controller = mock(DataFlowController.class);
+      var dataRequest = DataRequest.Builder.newInstance()
+                            .destinationType("test-dest-type")
+                            .build();
+      var dataAddress =
+          DataAddress.Builder.newInstance().type("test-type").build();
+      var policy = Policy.Builder.newInstance().build();
+      var transferProcess = TransferProcess.Builder.newInstance()
+                                .dataRequest(dataRequest)
+                                .contentDataAddress(dataAddress)
+                                .build();
 
+      var errorMsg = "Test Error Message";
+      when(controller.canHandle(any())).thenReturn(true);
+      when(controller.initiateFlow(any(), any()))
+          .thenThrow(new EdcException(errorMsg));
+      manager.register(controller);
 
-            var result = manager.transferTypesFor(asset);
+      var response = manager.initiate(transferProcess, policy);
 
-            assertThat(result).containsExactlyInAnyOrder("Type1", "Type2", "Type3");
-        }
+      assertThat(response.succeeded()).isFalse();
+      assertThat(response.getFailure().status()).isEqualTo(FATAL_ERROR);
+      assertThat(response.getFailureMessages())
+          .hasSize(1)
+          .first()
+          .matches(message -> message.contains(errorMsg));
     }
 
+    @Test
+    void shouldChooseHighestPriorityController() {
+      var highPriority = createDataFlowController();
+      var lowPriority = createDataFlowController();
+      manager.register(1, lowPriority);
+      manager.register(2, highPriority);
+
+      manager.initiate(TransferProcess.Builder.newInstance().build(),
+                       Policy.Builder.newInstance().build());
+
+      verify(highPriority).initiateFlow(any(), any());
+      verifyNoInteractions(lowPriority);
+    }
+
+    private DataFlowController createDataFlowController() {
+      var dataFlowController = mock(DataFlowController.class);
+      when(dataFlowController.canHandle(any())).thenReturn(true);
+      when(dataFlowController.initiateFlow(any(), any()))
+          .thenReturn(StatusResult.success(
+              DataFlowResponse.Builder.newInstance().build()));
+      return dataFlowController;
+    }
+  }
+
+  @Nested
+  class Terminate {
+    @Test
+    void shouldChooseControllerAndTerminate() {
+      var controller = mock(DataFlowController.class);
+      var dataRequest = DataRequest.Builder.newInstance()
+                            .destinationType("test-dest-type")
+                            .build();
+      var dataAddress =
+          DataAddress.Builder.newInstance().type("test-type").build();
+      var transferProcess = TransferProcess.Builder.newInstance()
+                                .dataRequest(dataRequest)
+                                .contentDataAddress(dataAddress)
+                                .build();
+
+      when(controller.canHandle(any())).thenReturn(true);
+      when(controller.terminate(any())).thenReturn(StatusResult.success());
+      manager.register(controller);
+
+      var result = manager.terminate(transferProcess);
+
+      assertThat(result).isSucceeded();
+      verify(controller).terminate(transferProcess);
+    }
+  }
+
+  @Nested
+  class TransferTypesFor {
+    @Test
+    void shouldReturnTransferTypesFromControllers() {
+      var controllerOne = mock(DataFlowController.class);
+      when(controllerOne.transferTypesFor(any())).thenReturn(Set.of("Type1"));
+      var controllerTwo = mock(DataFlowController.class);
+      when(controllerTwo.transferTypesFor(any()))
+          .thenReturn(Set.of("Type2", "Type3"));
+      manager.register(controllerOne);
+      manager.register(controllerTwo);
+      var asset = Asset.Builder.newInstance().build();
+
+      var result = manager.transferTypesFor(asset);
+
+      assertThat(result).containsExactlyInAnyOrder("Type1", "Type2", "Type3");
+    }
+  }
 }

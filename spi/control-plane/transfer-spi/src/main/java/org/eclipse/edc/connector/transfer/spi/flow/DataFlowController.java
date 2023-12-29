@@ -14,6 +14,7 @@
 
 package org.eclipse.edc.connector.transfer.spi.flow;
 
+import java.util.Set;
 import org.eclipse.edc.connector.transfer.spi.types.DataFlowResponse;
 import org.eclipse.edc.connector.transfer.spi.types.TransferProcess;
 import org.eclipse.edc.policy.model.Policy;
@@ -22,45 +23,49 @@ import org.eclipse.edc.spi.response.StatusResult;
 import org.eclipse.edc.spi.types.domain.asset.Asset;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Set;
-
 /**
  * Handles a data flow.
  */
 public interface DataFlowController {
 
-    /**
-     * Returns true if the manager can handle the Transfer Process.
-     *
-     * @param transferProcess    the TransferProcess
-     * @return true if it can handle the TransferProcess, false otherwise.
-     */
-    boolean canHandle(TransferProcess transferProcess);
+  /**
+   * Returns true if the manager can handle the Transfer Process.
+   *
+   * @param transferProcess    the TransferProcess
+   * @return true if it can handle the TransferProcess, false otherwise.
+   */
+  boolean canHandle(TransferProcess transferProcess);
 
-    /**
-     * Initiate a data flow.
-     *
-     * <p>Implementations should not throw exceptions. If an unexpected exception occurs and the flow should be re-attempted, set {@link ResponseStatus#ERROR_RETRY} in the
-     * response. If an exception occurs and re-tries should not be re-attempted, set {@link ResponseStatus#FATAL_ERROR} in the response. </p>
-     *
-     * @param transferProcess    the transfer process
-     * @param policy             the contract agreement usage policy for the asset being transferred
-     */
-    @NotNull
-    StatusResult<DataFlowResponse> initiateFlow(TransferProcess transferProcess, Policy policy);
+  /**
+   * Initiate a data flow.
+   *
+   * <p>Implementations should not throw exceptions. If an unexpected exception
+   * occurs and the flow should be re-attempted, set {@link
+   * ResponseStatus#ERROR_RETRY} in the response. If an exception occurs and
+   * re-tries should not be re-attempted, set {@link ResponseStatus#FATAL_ERROR}
+   * in the response. </p>
+   *
+   * @param transferProcess    the transfer process
+   * @param policy             the contract agreement usage policy for the asset
+   *     being transferred
+   */
+  @NotNull
+  StatusResult<DataFlowResponse> initiateFlow(TransferProcess transferProcess,
+                                              Policy policy);
 
-    /**
-     * Terminate a data flow.
-     *
-     * @param transferProcess the transfer process.
-     * @return success if the flow is terminated correctly, failure otherwise;
-     */
-    StatusResult<Void> terminate(TransferProcess transferProcess);
+  /**
+   * Terminate a data flow.
+   *
+   * @param transferProcess the transfer process.
+   * @return success if the flow is terminated correctly, failure otherwise;
+   */
+  StatusResult<Void> terminate(TransferProcess transferProcess);
 
-    /**
-     * Returns transfer types that the controller can handle for the specified Asset.
-     *
-     * @return transfer type set.
-     */
-    Set<String> transferTypesFor(Asset asset);
+  /**
+   * Returns transfer types that the controller can handle for the specified
+   * Asset.
+   *
+   * @return transfer type set.
+   */
+  Set<String> transferTypesFor(Asset asset);
 }

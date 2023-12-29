@@ -8,25 +8,25 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.catalog.spi;
 
-import org.eclipse.edc.spi.types.domain.asset.Asset;
-
 import java.util.List;
+import org.eclipse.edc.spi.types.domain.asset.Asset;
 
 /**
  * Resolves the {@link Distribution}s
  */
 public interface DistributionResolver {
 
-    /**
-     * Return all the {@link Distribution}s for the given {@link Asset}.
-     *
-     * @return a list of Distributions, always not null
-     */
-    List<Distribution> getDistributions(Asset asset);
+  /**
+   * Return all the {@link Distribution}s for the given {@link Asset}.
+   *
+   * @return a list of Distributions, always not null
+   */
+  List<Distribution> getDistributions(Asset asset);
 }
