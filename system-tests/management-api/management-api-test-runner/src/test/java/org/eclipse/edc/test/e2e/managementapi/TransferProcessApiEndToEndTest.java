@@ -8,28 +8,12 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.test.e2e.managementapi;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import jakarta.json.Json;
-import jakarta.json.JsonArray;
-import jakarta.json.JsonArrayBuilder;
-import jakarta.json.JsonObject;
-import org.eclipse.edc.connector.transfer.spi.store.TransferProcessStore;
-import org.eclipse.edc.connector.transfer.spi.types.DataRequest;
-import org.eclipse.edc.connector.transfer.spi.types.TransferProcess;
-import org.eclipse.edc.jsonld.util.JacksonJsonLd;
-import org.eclipse.edc.junit.annotations.EndToEndTest;
-import org.eclipse.edc.spi.types.domain.DataAddress;
-import org.eclipse.edc.spi.types.domain.callback.CallbackAddress;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.UUID;
 
 import static io.restassured.http.ContentType.JSON;
 import static jakarta.json.Json.createObjectBuilder;
@@ -50,187 +34,214 @@ import static org.eclipse.edc.spi.types.domain.callback.CallbackAddress.URI;
 import static org.hamcrest.CoreMatchers.anyOf;
 import static org.hamcrest.Matchers.is;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import jakarta.json.Json;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonArrayBuilder;
+import jakarta.json.JsonObject;
+import java.util.List;
+import java.util.UUID;
+import org.eclipse.edc.connector.transfer.spi.store.TransferProcessStore;
+import org.eclipse.edc.connector.transfer.spi.types.DataRequest;
+import org.eclipse.edc.connector.transfer.spi.types.TransferProcess;
+import org.eclipse.edc.jsonld.util.JacksonJsonLd;
+import org.eclipse.edc.junit.annotations.EndToEndTest;
+import org.eclipse.edc.spi.types.domain.DataAddress;
+import org.eclipse.edc.spi.types.domain.callback.CallbackAddress;
+import org.junit.jupiter.api.Test;
+
 @EndToEndTest
-public class TransferProcessApiEndToEndTest extends BaseManagementApiEndToEndTest {
+public class TransferProcessApiEndToEndTest
+    extends BaseManagementApiEndToEndTest {
 
-    @Test
-    void getAll() {
-        getStore().save(createTransferProcess("tp1"));
-        getStore().save(createTransferProcess("tp2"));
+  @Test
+  void getAll() {
+    getStore().save(createTransferProcess("tp1"));
+    getStore().save(createTransferProcess("tp2"));
 
-        baseRequest()
-                .contentType(JSON)
-                .post("/v2/transferprocesses/request")
-                .then()
-                .statusCode(200)
-                .body("size()", is(2))
-                .body("[0].@id", anyOf(is("tp1"), is("tp2")))
-                .body("[1].@id", anyOf(is("tp1"), is("tp2")));
+    baseRequest()
+        .contentType(JSON)
+        .post("/v2/transferprocesses/request")
+        .then()
+        .statusCode(200)
+        .body("size()", is(2))
+        .body("[0].@id", anyOf(is("tp1"), is("tp2")))
+        .body("[1].@id", anyOf(is("tp1"), is("tp2")));
+  }
+
+  @Test
+  void getById() {
+    getStore().save(createTransferProcess("tp1"));
+    getStore().save(createTransferProcess("tp2"));
+
+    baseRequest()
+        .get("/v2/transferprocesses/tp2")
+        .then()
+        .statusCode(200)
+        .body("@id", is("tp2"))
+        .body(TYPE, is("TransferProcess"));
+  }
+
+  @Test
+  void getState() {
+    getStore().save(
+        createTransferProcessBuilder("tp2").state(COMPLETED.code()).build());
+
+    baseRequest()
+        .get("/v2/transferprocesses/tp2/state")
+        .then()
+        .statusCode(200)
+        .contentType(JSON)
+        .body(TYPE, is("TransferState"))
+        .body("'state'", is("COMPLETED"));
+  }
+
+  @Test
+  void create() {
+    var requestBody =
+        createObjectBuilder()
+            .add(CONTEXT, createObjectBuilder().add(EDC_PREFIX, EDC_NAMESPACE))
+            .add(TYPE, "TransferRequest")
+            .add("dataDestination",
+                 createObjectBuilder()
+                     .add(TYPE, "DataAddress")
+                     .add("type", "HttpData")
+                     .add("properties", createObjectBuilder()
+                                            .add("baseUrl", "http://any")
+                                            .build())
+                     .build())
+            .add("callbackAddresses", createCallbackAddress())
+            .add("protocol", "dataspace-protocol-http")
+            .add("counterPartyAddress", "http://connector-address")
+            .add("connectorId", "connectorId")
+            .add("contractId", "contractId")
+            .add("assetId", "assetId")
+            .build();
+
+    var id = baseRequest()
+                 .contentType(JSON)
+                 .body(requestBody)
+                 .post("/v2/transferprocesses/")
+                 .then()
+                 .log()
+                 .ifError()
+                 .statusCode(200)
+                 .extract()
+                 .jsonPath()
+                 .getString(ID);
+
+    assertThat(getStore().findById(id)).isNotNull();
+  }
+
+  @Test
+  void deprovision() {
+    var id = UUID.randomUUID().toString();
+    getStore().save(
+        createTransferProcessBuilder(id).state(COMPLETED.code()).build());
+
+    baseRequest()
+        .contentType(JSON)
+        .post("/v2/transferprocesses/" + id + "/deprovision")
+        .then()
+        .statusCode(204);
+  }
+
+  @Test
+  void terminate() {
+    var id = UUID.randomUUID().toString();
+    getStore().save(
+        createTransferProcessBuilder(id).state(REQUESTED.code()).build());
+    var requestBody =
+        createObjectBuilder()
+            .add(CONTEXT, createObjectBuilder().add(VOCAB, EDC_NAMESPACE))
+            .add("reason", "any")
+            .build();
+
+    baseRequest()
+        .contentType(JSON)
+        .body(requestBody)
+        .post("/v2/transferprocesses/" + id + "/terminate")
+        .then()
+        .log()
+        .ifError()
+        .statusCode(204);
+  }
+
+  @Test
+  void request_byState() throws JsonProcessingException {
+
+    var state = DEPROVISIONED;
+    var tp =
+        createTransferProcessBuilder("test-tp").state(state.code()).build();
+    getStore().save(tp);
+
+    var content = "" "
+    {
+      "@context" : {"@vocab" : "https://w3id.org/edc/v0.0.1/ns/"},
+                   "@type" : "QuerySpec",
+                             "filterExpression" : [ {
+                               "operandLeft" : "state",
+                               "operandRight" : % d,
+                               "operator" : "="
+                             } ],
+                                                  "limit" : 100,
+                                                  "offset" : 0
     }
+    "" ".formatted(state.code());
+        var query = JacksonJsonLd.createObjectMapper().readValue(
+            content, JsonObject.class);
 
-    @Test
-    void getById() {
-        getStore().save(createTransferProcess("tp1"));
-        getStore().save(createTransferProcess("tp2"));
+    var result = baseRequest()
+                     .contentType(JSON)
+                     .body(query)
+                     .post("/v2/transferprocesses/request")
+                     .then()
+                     .statusCode(200)
+                     .extract()
+                     .body()
+                     .as(JsonArray.class);
 
-        baseRequest()
-                .get("/v2/transferprocesses/tp2")
-                .then()
-                .statusCode(200)
-                .body("@id", is("tp2"))
-                .body(TYPE, is("TransferProcess"));
-    }
+    assertThat(result).isNotEmpty();
+    assertThat(result).anySatisfy(
+        it
+        -> assertThat(it.asJsonObject().getString("state"))
+               .isEqualTo(state.toString()));
+  }
 
-    @Test
-    void getState() {
-        getStore().save(createTransferProcessBuilder("tp2").state(COMPLETED.code()).build());
+  private TransferProcessStore getStore() {
+    return controlPlane.getContext().getService(TransferProcessStore.class);
+  }
 
-        baseRequest()
-                .get("/v2/transferprocesses/tp2/state")
-                .then()
-                .statusCode(200)
-                .contentType(JSON)
-                .body(TYPE, is("TransferState"))
-                .body("'state'", is("COMPLETED"));
-    }
+  private TransferProcess createTransferProcess(String id) {
+    return createTransferProcessBuilder(id).build();
+  }
 
-    @Test
-    void create() {
-        var requestBody = createObjectBuilder()
-                .add(CONTEXT, createObjectBuilder().add(EDC_PREFIX, EDC_NAMESPACE))
-                .add(TYPE, "TransferRequest")
-                .add("dataDestination", createObjectBuilder()
-                        .add(TYPE, "DataAddress")
-                        .add("type", "HttpData")
-                        .add("properties", createObjectBuilder()
-                                .add("baseUrl", "http://any")
-                                .build())
-                        .build()
-                )
-                .add("callbackAddresses", createCallbackAddress())
-                .add("protocol", "dataspace-protocol-http")
-                .add("counterPartyAddress", "http://connector-address")
-                .add("connectorId", "connectorId")
-                .add("contractId", "contractId")
-                .add("assetId", "assetId")
-                .build();
+  private TransferProcess.Builder createTransferProcessBuilder(String id) {
+    return TransferProcess.Builder.newInstance()
+        .id(id)
+        .callbackAddresses(List.of(CallbackAddress.Builder.newInstance()
+                                       .uri("http://any")
+                                       .events(emptySet())
+                                       .build()))
+        .dataRequest(
+            DataRequest.Builder.newInstance()
+                .id(UUID.randomUUID().toString())
+                .dataDestination(
+                    DataAddress.Builder.newInstance().type("type").build())
+                .protocol("dataspace-protocol-http")
+                .assetId("asset-id")
+                .connectorId("connector-id")
+                .contractId("contractId")
+                .connectorAddress("http://connector/address")
+                .processId(id)
+                .build());
+  }
 
-        var id = baseRequest()
-                .contentType(JSON)
-                .body(requestBody)
-                .post("/v2/transferprocesses/")
-                .then()
-                .log().ifError()
-                .statusCode(200)
-                .extract().jsonPath().getString(ID);
-
-        assertThat(getStore().findById(id)).isNotNull();
-    }
-
-    @Test
-    void deprovision() {
-        var id = UUID.randomUUID().toString();
-        getStore().save(createTransferProcessBuilder(id).state(COMPLETED.code()).build());
-
-        baseRequest()
-                .contentType(JSON)
-                .post("/v2/transferprocesses/" + id + "/deprovision")
-                .then()
-                .statusCode(204);
-    }
-
-    @Test
-    void terminate() {
-        var id = UUID.randomUUID().toString();
-        getStore().save(createTransferProcessBuilder(id).state(REQUESTED.code()).build());
-        var requestBody = createObjectBuilder()
-                .add(CONTEXT, createObjectBuilder().add(VOCAB, EDC_NAMESPACE))
-                .add("reason", "any")
-                .build();
-
-        baseRequest()
-                .contentType(JSON)
-                .body(requestBody)
-                .post("/v2/transferprocesses/" + id + "/terminate")
-                .then()
-                .log().ifError()
-                .statusCode(204);
-    }
-
-    @Test
-    void request_byState() throws JsonProcessingException {
-
-        var state = DEPROVISIONED;
-        var tp = createTransferProcessBuilder("test-tp")
-                .state(state.code())
-                .build();
-        getStore().save(tp);
-
-
-        var content = """
-                {
-                    "@context": {
-                        "@vocab": "https://w3id.org/edc/v0.0.1/ns/"
-                    },
-                    "@type": "QuerySpec",
-                    "filterExpression": [
-                        {
-                            "operandLeft": "state",
-                            "operandRight": %d,
-                            "operator": "="
-                        }
-                    ],
-                    "limit": 100,
-                    "offset": 0
-                }
-                """.formatted(state.code());
-        var query = JacksonJsonLd.createObjectMapper()
-                .readValue(content, JsonObject.class);
-
-        var result = baseRequest()
-                .contentType(JSON)
-                .body(query)
-                .post("/v2/transferprocesses/request")
-                .then()
-                .statusCode(200)
-                .extract().body().as(JsonArray.class);
-
-        assertThat(result).isNotEmpty();
-        assertThat(result).anySatisfy(it -> assertThat(it.asJsonObject().getString("state")).isEqualTo(state.toString()));
-    }
-
-    private TransferProcessStore getStore() {
-        return controlPlane.getContext().getService(TransferProcessStore.class);
-    }
-
-    private TransferProcess createTransferProcess(String id) {
-        return createTransferProcessBuilder(id).build();
-    }
-
-    private TransferProcess.Builder createTransferProcessBuilder(String id) {
-        return TransferProcess.Builder.newInstance()
-                .id(id)
-                .callbackAddresses(List.of(CallbackAddress.Builder.newInstance().uri("http://any").events(emptySet()).build()))
-                .dataRequest(DataRequest.Builder.newInstance()
-                        .id(UUID.randomUUID().toString())
-                        .dataDestination(DataAddress.Builder.newInstance()
-                                .type("type")
-                                .build())
-                        .protocol("dataspace-protocol-http")
-                        .assetId("asset-id")
-                        .connectorId("connector-id")
-                        .contractId("contractId")
-                        .connectorAddress("http://connector/address")
-                        .processId(id)
-                        .build());
-    }
-
-    private JsonArrayBuilder createCallbackAddress() {
-        var builder = Json.createArrayBuilder();
-        return builder.add(createObjectBuilder()
-                .add(IS_TRANSACTIONAL, false)
-                .add(URI, "http://test.local/")
-                .add(EVENTS, Json.createArrayBuilder().build()));
-    }
-
+  private JsonArrayBuilder createCallbackAddress() {
+    var builder = Json.createArrayBuilder();
+    return builder.add(createObjectBuilder()
+                           .add(IS_TRANSACTIONAL, false)
+                           .add(URI, "http://test.local/")
+                           .add(EVENTS, Json.createArrayBuilder().build()));
+  }
 }

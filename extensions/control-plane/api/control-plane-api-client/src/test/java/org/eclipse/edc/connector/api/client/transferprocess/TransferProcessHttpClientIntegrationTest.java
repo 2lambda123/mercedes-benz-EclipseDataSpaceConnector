@@ -14,6 +14,21 @@
 
 package org.eclipse.edc.connector.api.client.transferprocess;
 
+import static java.util.concurrent.CompletableFuture.completedFuture;
+import static java.util.concurrent.CompletableFuture.failedFuture;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.INTEGER;
+import static org.awaitility.Awaitility.await;
+import static org.eclipse.edc.connector.transfer.spi.types.TransferProcessStates.COMPLETED;
+import static org.eclipse.edc.connector.transfer.spi.types.TransferProcessStates.TERMINATED;
+import static org.eclipse.edc.junit.testfixtures.TestUtils.getFreePort;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.net.URI;
+import java.util.Map;
+import java.util.UUID;
 import org.eclipse.edc.connector.dataplane.spi.manager.DataPlaneManager;
 import org.eclipse.edc.connector.dataplane.spi.pipeline.StreamResult;
 import org.eclipse.edc.connector.dataplane.spi.pipeline.TransferService;
@@ -42,148 +57,147 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.net.URI;
-import java.util.Map;
-import java.util.UUID;
-
-import static java.util.concurrent.CompletableFuture.completedFuture;
-import static java.util.concurrent.CompletableFuture.failedFuture;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.InstanceOfAssertFactories.INTEGER;
-import static org.awaitility.Awaitility.await;
-import static org.eclipse.edc.connector.transfer.spi.types.TransferProcessStates.COMPLETED;
-import static org.eclipse.edc.connector.transfer.spi.types.TransferProcessStates.TERMINATED;
-import static org.eclipse.edc.junit.testfixtures.TestUtils.getFreePort;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(EdcExtension.class)
 @ComponentTest
 public class TransferProcessHttpClientIntegrationTest {
 
-    private final int port = getFreePort();
-    private final TransferService service = mock();
+  private final int port = getFreePort();
+  private final TransferService service = mock();
 
-    @BeforeEach
-    void setUp(EdcExtension extension) {
-        when(service.canHandle(any())).thenReturn(true);
+  @BeforeEach
+  void setUp(EdcExtension extension) {
+    when(service.canHandle(any())).thenReturn(true);
 
-        extension.setConfiguration(Map.of(
-                "web.http.port", String.valueOf(getFreePort()),
-                "web.http.path", "/api",
-                "web.http.control.port", String.valueOf(port),
-                "web.http.control.path", "/control",
-                "edc.core.retry.retries.max", "0",
-                "edc.dataplane.send.retry.limit", "0"
-        ));
+    extension.setConfiguration(Map.of(
+        "web.http.port", String.valueOf(getFreePort()), "web.http.path", "/api",
+        "web.http.control.port", String.valueOf(port), "web.http.control.path",
+        "/control", "edc.core.retry.retries.max", "0",
+        "edc.dataplane.send.retry.limit", "0"));
 
-        extension.registerSystemExtension(ServiceExtension.class, new TransferServiceMockExtension(service));
-        extension.registerServiceMock(ProtocolWebhook.class, mock());
-        extension.registerServiceMock(IdentityService.class, mock());
-        var registry = mock(RemoteMessageDispatcherRegistry.class);
-        when(registry.dispatch(any(), any())).thenReturn(completedFuture(StatusResult.success("any")));
-        extension.registerServiceMock(RemoteMessageDispatcherRegistry.class, registry);
+    extension.registerSystemExtension(
+        ServiceExtension.class, new TransferServiceMockExtension(service));
+    extension.registerServiceMock(ProtocolWebhook.class, mock());
+    extension.registerServiceMock(IdentityService.class, mock());
+    var registry = mock(RemoteMessageDispatcherRegistry.class);
+    when(registry.dispatch(any(), any()))
+        .thenReturn(completedFuture(StatusResult.success("any")));
+    extension.registerServiceMock(RemoteMessageDispatcherRegistry.class,
+                                  registry);
+  }
+
+  @Test
+  void shouldCallTransferProcessApiWithComplete(TransferProcessStore store,
+                                                DataPlaneManager manager,
+                                                ControlApiUrl callbackUrl) {
+    when(service.transfer(any()))
+        .thenReturn(completedFuture(StreamResult.success()));
+    var id = "tp-id";
+    store.save(createTransferProcess(id));
+    var dataFlowRequest = createDataFlowRequest(id, callbackUrl.get());
+
+    manager.initiate(dataFlowRequest);
+
+    await().untilAsserted(() -> {
+      var transferProcess = store.findById("tp-id");
+      assertThat(transferProcess)
+          .isNotNull()
+          .extracting(StatefulEntity::getState)
+          .asInstanceOf(INTEGER)
+          .isGreaterThanOrEqualTo(COMPLETED.code());
+    });
+  }
+
+  @Test
+  void shouldCallTransferProcessApiWithFailed(TransferProcessStore store,
+                                              DataPlaneManager manager,
+                                              ControlApiUrl callbackUrl) {
+    when(service.transfer(any()))
+        .thenReturn(completedFuture(StreamResult.error("error")));
+    var id = "tp-id";
+    store.save(createTransferProcess(id));
+    var dataFlowRequest = createDataFlowRequest(id, callbackUrl.get());
+
+    manager.initiate(dataFlowRequest);
+
+    await().untilAsserted(() -> {
+      var transferProcess = store.findById("tp-id");
+      assertThat(transferProcess).isNotNull().satisfies(process -> {
+        assertThat(process.getState())
+            .isGreaterThanOrEqualTo(TERMINATED.code());
+        assertThat(process.getErrorDetail()).isEqualTo("error");
+      });
+    });
+  }
+
+  @Test
+  void shouldCallTransferProcessApiWithException(TransferProcessStore store,
+                                                 DataPlaneManager manager,
+                                                 ControlApiUrl callbackUrl) {
+    when(service.transfer(any()))
+        .thenReturn(failedFuture(new EdcException("error")));
+    var id = "tp-id";
+    store.save(createTransferProcess(id));
+    var dataFlowRequest = createDataFlowRequest(id, callbackUrl.get());
+
+    manager.initiate(dataFlowRequest);
+
+    await().untilAsserted(() -> {
+      var transferProcess = store.findById("tp-id");
+      assertThat(transferProcess).isNotNull().satisfies(process -> {
+        assertThat(process.getState())
+            .isGreaterThanOrEqualTo(TERMINATED.code());
+        assertThat(process.getErrorDetail()).isEqualTo("error");
+      });
+    });
+  }
+
+  private TransferProcess createTransferProcess(String id) {
+    return TransferProcess.Builder.newInstance()
+        .id(id)
+        .state(TransferProcessStates.STARTED.code())
+        .type(TransferProcess.Type.PROVIDER)
+        .dataRequest(DataRequest.Builder.newInstance()
+                         .id(UUID.randomUUID().toString())
+                         .destinationType("file")
+                         .protocol("any")
+                         .connectorAddress("http://an/address")
+                         .build())
+        .build();
+  }
+
+  private DataFlowRequest createDataFlowRequest(String processId,
+                                                URI callbackAddress) {
+    return DataFlowRequest.Builder.newInstance()
+        .id(UUID.randomUUID().toString())
+        .processId(processId)
+        .callbackAddress(callbackAddress)
+        .sourceDataAddress(
+            DataAddress.Builder.newInstance().type("file").build())
+        .destinationDataAddress(
+            DataAddress.Builder.newInstance().type("file").build())
+        .build();
+  }
+
+  private static class TransferServiceMockExtension
+      implements ServiceExtension {
+
+    private final TransferService transferService;
+
+    @Inject private TransferServiceRegistry registry;
+
+    @Inject private DataFlowManager dataFlowManager;
+
+    private TransferServiceMockExtension(TransferService transferService) {
+      this.transferService = transferService;
     }
 
-    @Test
-    void shouldCallTransferProcessApiWithComplete(TransferProcessStore store, DataPlaneManager manager, ControlApiUrl callbackUrl) {
-        when(service.transfer(any())).thenReturn(completedFuture(StreamResult.success()));
-        var id = "tp-id";
-        store.save(createTransferProcess(id));
-        var dataFlowRequest = createDataFlowRequest(id, callbackUrl.get());
-
-        manager.initiate(dataFlowRequest);
-
-        await().untilAsserted(() -> {
-            var transferProcess = store.findById("tp-id");
-            assertThat(transferProcess).isNotNull()
-                    .extracting(StatefulEntity::getState).asInstanceOf(INTEGER).isGreaterThanOrEqualTo(COMPLETED.code());
-        });
+    @Override
+    public void initialize(ServiceExtensionContext context) {
+      registry.registerTransferService(transferService);
+      DataFlowController controller = mock();
+      when(controller.canHandle(any())).thenReturn(true);
+      when(controller.terminate(any())).thenReturn(StatusResult.success());
+      dataFlowManager.register(controller);
     }
-
-    @Test
-    void shouldCallTransferProcessApiWithFailed(TransferProcessStore store, DataPlaneManager manager, ControlApiUrl callbackUrl) {
-        when(service.transfer(any())).thenReturn(completedFuture(StreamResult.error("error")));
-        var id = "tp-id";
-        store.save(createTransferProcess(id));
-        var dataFlowRequest = createDataFlowRequest(id, callbackUrl.get());
-
-        manager.initiate(dataFlowRequest);
-
-        await().untilAsserted(() -> {
-            var transferProcess = store.findById("tp-id");
-            assertThat(transferProcess).isNotNull().satisfies(process -> {
-                assertThat(process.getState()).isGreaterThanOrEqualTo(TERMINATED.code());
-                assertThat(process.getErrorDetail()).isEqualTo("error");
-            });
-        });
-    }
-
-    @Test
-    void shouldCallTransferProcessApiWithException(TransferProcessStore store, DataPlaneManager manager, ControlApiUrl callbackUrl) {
-        when(service.transfer(any())).thenReturn(failedFuture(new EdcException("error")));
-        var id = "tp-id";
-        store.save(createTransferProcess(id));
-        var dataFlowRequest = createDataFlowRequest(id, callbackUrl.get());
-
-        manager.initiate(dataFlowRequest);
-
-        await().untilAsserted(() -> {
-            var transferProcess = store.findById("tp-id");
-            assertThat(transferProcess).isNotNull().satisfies(process -> {
-                assertThat(process.getState()).isGreaterThanOrEqualTo(TERMINATED.code());
-                assertThat(process.getErrorDetail()).isEqualTo("error");
-            });
-        });
-    }
-
-    private TransferProcess createTransferProcess(String id) {
-        return TransferProcess.Builder.newInstance()
-                .id(id)
-                .state(TransferProcessStates.STARTED.code())
-                .type(TransferProcess.Type.PROVIDER)
-                .dataRequest(DataRequest.Builder.newInstance()
-                        .id(UUID.randomUUID().toString())
-                        .destinationType("file")
-                        .protocol("any")
-                        .connectorAddress("http://an/address")
-                        .build())
-                .build();
-    }
-
-    private DataFlowRequest createDataFlowRequest(String processId, URI callbackAddress) {
-        return DataFlowRequest.Builder.newInstance()
-                .id(UUID.randomUUID().toString())
-                .processId(processId)
-                .callbackAddress(callbackAddress)
-                .sourceDataAddress(DataAddress.Builder.newInstance().type("file").build())
-                .destinationDataAddress(DataAddress.Builder.newInstance().type("file").build())
-                .build();
-    }
-
-    private static class TransferServiceMockExtension implements ServiceExtension {
-
-        private final TransferService transferService;
-
-        @Inject
-        private TransferServiceRegistry registry;
-
-        @Inject
-        private DataFlowManager dataFlowManager;
-
-        private TransferServiceMockExtension(TransferService transferService) {
-            this.transferService = transferService;
-        }
-
-        @Override
-        public void initialize(ServiceExtensionContext context) {
-            registry.registerTransferService(transferService);
-            DataFlowController controller = mock();
-            when(controller.canHandle(any())).thenReturn(true);
-            when(controller.terminate(any())).thenReturn(StatusResult.success());
-            dataFlowManager.register(controller);
-        }
-    }
-
+  }
 }

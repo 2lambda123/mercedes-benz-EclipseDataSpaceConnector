@@ -8,12 +8,17 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.connector.service.contractagreement;
 
+import static java.lang.String.format;
+import static org.eclipse.edc.spi.query.Criterion.criterion;
+
+import java.util.List;
 import org.eclipse.edc.connector.contract.spi.negotiation.store.ContractNegotiationStore;
 import org.eclipse.edc.connector.contract.spi.types.negotiation.ContractNegotiation;
 import org.eclipse.edc.connector.service.query.QueryValidator;
@@ -23,48 +28,47 @@ import org.eclipse.edc.spi.result.ServiceResult;
 import org.eclipse.edc.spi.types.domain.agreement.ContractAgreement;
 import org.eclipse.edc.transaction.spi.TransactionContext;
 
-import java.util.List;
-
-import static java.lang.String.format;
-import static org.eclipse.edc.spi.query.Criterion.criterion;
-
 public class ContractAgreementServiceImpl implements ContractAgreementService {
-    private final ContractNegotiationStore store;
-    private final TransactionContext transactionContext;
-    private final QueryValidator queryValidator;
+  private final ContractNegotiationStore store;
+  private final TransactionContext transactionContext;
+  private final QueryValidator queryValidator;
 
-    public ContractAgreementServiceImpl(ContractNegotiationStore store, TransactionContext transactionContext) {
-        this.store = store;
-        this.transactionContext = transactionContext;
-        queryValidator = new QueryValidator(ContractAgreement.class);
-    }
+  public ContractAgreementServiceImpl(ContractNegotiationStore store,
+                                      TransactionContext transactionContext) {
+    this.store = store;
+    this.transactionContext = transactionContext;
+    queryValidator = new QueryValidator(ContractAgreement.class);
+  }
 
-    @Override
-    public ContractAgreement findById(String contractAgreementId) {
-        return transactionContext.execute(() -> store.findContractAgreement(contractAgreementId));
-    }
+  @Override
+  public ContractAgreement findById(String contractAgreementId) {
+    return transactionContext.execute(
+        () -> store.findContractAgreement(contractAgreementId));
+  }
 
-    @Override
-    public ServiceResult<List<ContractAgreement>> search(QuerySpec query) {
-        return queryValidator.validate(query)
-                .flatMap(validation -> validation.failed()
-                        ? ServiceResult.badRequest(format("Error validating schema: %s", validation.getFailureDetail()))
-                        : ServiceResult.success(queryAgreements(query))
-                );
-    }
+  @Override
+  public ServiceResult<List<ContractAgreement>> search(QuerySpec query) {
+    return queryValidator.validate(query).flatMap(
+        validation
+        -> validation.failed()
+               ? ServiceResult.badRequest(format("Error validating schema: %s",
+                                                 validation.getFailureDetail()))
+               : ServiceResult.success(queryAgreements(query)));
+  }
 
-    @Override
-    public ContractNegotiation findNegotiation(String contractAgreementId) {
-        var criterion = criterion("contractAgreement.id", "=", contractAgreementId);
-        var query = QuerySpec.Builder.newInstance().filter(criterion).build();
-        return transactionContext.execute(() -> store.queryNegotiations(query).findFirst().orElse(null));
-    }
+  @Override
+  public ContractNegotiation findNegotiation(String contractAgreementId) {
+    var criterion = criterion("contractAgreement.id", "=", contractAgreementId);
+    var query = QuerySpec.Builder.newInstance().filter(criterion).build();
+    return transactionContext.execute(
+        () -> store.queryNegotiations(query).findFirst().orElse(null));
+  }
 
-    private List<ContractAgreement> queryAgreements(QuerySpec query) {
-        return transactionContext.execute(() -> {
-            try (var stream = store.queryAgreements(query)) {
-                return stream.toList();
-            }
-        });
-    }
+  private List<ContractAgreement> queryAgreements(QuerySpec query) {
+    return transactionContext.execute(() -> {
+      try (var stream = store.queryAgreements(query)) {
+        return stream.toList();
+      }
+    });
+  }
 }

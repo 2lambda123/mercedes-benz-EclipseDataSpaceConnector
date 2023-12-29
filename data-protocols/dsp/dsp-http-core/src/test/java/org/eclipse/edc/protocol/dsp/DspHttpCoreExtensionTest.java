@@ -8,11 +8,19 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.protocol.dsp;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.eclipse.edc.junit.extensions.DependencyInjectionExtension;
 import org.eclipse.edc.protocol.dsp.message.DspRequestHandlerImpl;
@@ -26,59 +34,61 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(DependencyInjectionExtension.class)
 class DspHttpCoreExtensionTest {
 
-    private final IdentityService identityService = mock();
-    private DspHttpCoreExtension extension;
+  private final IdentityService identityService = mock();
+  private DspHttpCoreExtension extension;
 
-    @BeforeEach
-    void setUp(ServiceExtensionContext context) {
-        context.registerService(IdentityService.class, identityService);
-    }
+  @BeforeEach
+  void setUp(ServiceExtensionContext context) {
+    context.registerService(IdentityService.class, identityService);
+  }
 
-    @Test
-    @DisplayName("Assert usage of the default (noop) token decorator")
-    void createDispatcher_noTokenDecorator_shouldUseNoop(ServiceExtensionContext context, ObjectFactory factory) {
-        when(identityService.obtainClientCredentials(any())).thenReturn(Result.failure("not-important"));
-        context.registerService(TokenDecorator.class, null);
+  @Test
+  @DisplayName("Assert usage of the default (noop) token decorator")
+  void createDispatcher_noTokenDecorator_shouldUseNoop(
+      ServiceExtensionContext context, ObjectFactory factory) {
+    when(identityService.obtainClientCredentials(any()))
+        .thenReturn(Result.failure("not-important"));
+    context.registerService(TokenDecorator.class, null);
 
-        extension = factory.constructInstance(DspHttpCoreExtension.class);
-        var dispatcher = extension.dspHttpRemoteMessageDispatcher(context);
-        dispatcher.registerMessage(TestMessage.class, mock(), mock());
-        dispatcher.dispatch(String.class, new TestMessage("protocol", "address"));
+    extension = factory.constructInstance(DspHttpCoreExtension.class);
+    var dispatcher = extension.dspHttpRemoteMessageDispatcher(context);
+    dispatcher.registerMessage(TestMessage.class, mock(), mock());
+    dispatcher.dispatch(String.class, new TestMessage("protocol", "address"));
 
-        verify(identityService).obtainClientCredentials(argThat(tokenParams -> tokenParams.getScope() == null));
-    }
+    verify(identityService)
+        .obtainClientCredentials(
+            argThat(tokenParams -> tokenParams.getScope() == null));
+  }
 
-    @Test
-    @DisplayName("Assert usage of an injected TokenDecorator")
-    void createDispatcher_withTokenDecorator_shouldUse(ServiceExtensionContext context, ObjectFactory factory) {
-        when(identityService.obtainClientCredentials(any())).thenReturn(Result.failure("not-important"));
-        context.registerService(TokenDecorator.class, (td) -> td.scope("test-scope"));
+  @Test
+  @DisplayName("Assert usage of an injected TokenDecorator")
+  void
+  createDispatcher_withTokenDecorator_shouldUse(ServiceExtensionContext context,
+                                                ObjectFactory factory) {
+    when(identityService.obtainClientCredentials(any()))
+        .thenReturn(Result.failure("not-important"));
+    context.registerService(TokenDecorator.class,
+                            (td) -> td.scope("test-scope"));
 
-        extension = factory.constructInstance(DspHttpCoreExtension.class);
-        var dispatcher = extension.dspHttpRemoteMessageDispatcher(context);
-        dispatcher.registerMessage(TestMessage.class, mock(), mock());
-        dispatcher.dispatch(String.class, new TestMessage("protocol", "address"));
+    extension = factory.constructInstance(DspHttpCoreExtension.class);
+    var dispatcher = extension.dspHttpRemoteMessageDispatcher(context);
+    dispatcher.registerMessage(TestMessage.class, mock(), mock());
+    dispatcher.dispatch(String.class, new TestMessage("protocol", "address"));
 
-        verify(identityService).obtainClientCredentials(argThat(tokenParams -> tokenParams.getScope().equals("test-scope")));
-    }
+    verify(identityService)
+        .obtainClientCredentials(argThat(
+            tokenParams -> tokenParams.getScope().equals("test-scope")));
+  }
 
-    @Test
-    @DisplayName("Assert creation of a DspRequestHandlerImpl")
-    void createDspRequestHandler(DspHttpCoreExtension extension) {
+  @Test
+  @DisplayName("Assert creation of a DspRequestHandlerImpl")
+  void createDspRequestHandler(DspHttpCoreExtension extension) {
 
-        var handler = extension.dspRequestHandler();
+    var handler = extension.dspRequestHandler();
 
-        assertThat(handler).isInstanceOf(DspRequestHandlerImpl.class);
-
-    }
+    assertThat(handler).isInstanceOf(DspRequestHandlerImpl.class);
+  }
 }

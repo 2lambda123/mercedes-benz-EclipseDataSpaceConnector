@@ -8,83 +8,74 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.protocol.dsp.spi.message;
 
+import static java.util.Objects.requireNonNull;
+
+import java.util.function.BiFunction;
 import org.eclipse.edc.spi.iam.TokenRepresentation;
 import org.eclipse.edc.spi.result.ServiceResult;
 
-import java.util.function.BiFunction;
-
-import static java.util.Objects.requireNonNull;
-
 public class DspRequest<I, R> {
 
-    protected final Class<R> resultClass;
-    protected final Class<I> inputClass;
-    protected String token;
-    protected String errorType;
-    protected BiFunction<I, TokenRepresentation, ServiceResult<R>> serviceCall;
+  protected final Class<R> resultClass;
+  protected final Class<I> inputClass;
+  protected String token;
+  protected String errorType;
+  protected BiFunction<I, TokenRepresentation, ServiceResult<R>> serviceCall;
 
-    public DspRequest(Class<I> inputClass, Class<R> resultClass) {
-        this.inputClass = inputClass;
-        this.resultClass = resultClass;
+  public DspRequest(Class<I> inputClass, Class<R> resultClass) {
+    this.inputClass = inputClass;
+    this.resultClass = resultClass;
+  }
+
+  public String getToken() { return token; }
+
+  public Class<I> getInputClass() { return inputClass; }
+
+  public Class<R> getResultClass() { return resultClass; }
+
+  public BiFunction<I, TokenRepresentation, ServiceResult<R>> getServiceCall() {
+    return serviceCall;
+  }
+
+  public String getErrorType() { return errorType; }
+
+  public abstract static class Builder<I, R, M extends DspRequest<I, R>, B
+                                           extends Builder<I, R, M, B>> {
+
+    protected final M message;
+
+    protected Builder(M message) { this.message = message; }
+
+    public B token(String token) {
+      message.token = token;
+      return self();
     }
 
-    public String getToken() {
-        return token;
+    public B serviceCall(
+        BiFunction<I, TokenRepresentation, ServiceResult<R>> serviceCall) {
+      message.serviceCall = serviceCall;
+      return self();
     }
 
-    public Class<I> getInputClass() {
-        return inputClass;
+    public B errorType(String errorType) {
+      message.errorType = errorType;
+      return self();
     }
 
-    public Class<R> getResultClass() {
-        return resultClass;
+    public M build() {
+      requireNonNull(message.token);
+      requireNonNull(message.serviceCall);
+      requireNonNull(message.errorType);
+      return message;
     }
 
-    public BiFunction<I, TokenRepresentation, ServiceResult<R>> getServiceCall() {
-        return serviceCall;
-    }
-
-    public String getErrorType() {
-        return errorType;
-    }
-
-    public abstract static class Builder<I, R, M extends DspRequest<I, R>, B extends Builder<I, R, M, B>> {
-
-        protected final M message;
-
-        protected Builder(M message) {
-            this.message = message;
-        }
-
-        public B token(String token) {
-            message.token = token;
-            return self();
-        }
-
-        public B serviceCall(BiFunction<I, TokenRepresentation, ServiceResult<R>> serviceCall) {
-            message.serviceCall = serviceCall;
-            return self();
-        }
-
-        public B errorType(String errorType) {
-            message.errorType = errorType;
-            return self();
-        }
-
-        public M build() {
-            requireNonNull(message.token);
-            requireNonNull(message.serviceCall);
-            requireNonNull(message.errorType);
-            return message;
-        }
-
-        protected abstract B self();
-
-    }
+    protected abstract B self();
+  }
 }

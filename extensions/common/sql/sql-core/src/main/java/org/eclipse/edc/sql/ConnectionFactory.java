@@ -24,12 +24,12 @@ import java.util.Properties;
 @FunctionalInterface
 public interface ConnectionFactory {
 
-    /**
-     * Creates a fresh connection to the specified database
-     *
-     * @param jdbcUrl the JDBC url.
-     * @param properties the properties.
-     * @return a new Connection.
-     */
-    Connection create(String jdbcUrl, Properties properties);
+  /**
+   * Creates a fresh connection to the specified database
+   *
+   * @param jdbcUrl the JDBC url.
+   * @param properties the properties.
+   * @return a new Connection.
+   */
+  Connection create(String jdbcUrl, Properties properties);
 }

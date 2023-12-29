@@ -8,7 +8,8 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
@@ -23,42 +24,48 @@ import org.eclipse.edc.spi.monitor.Monitor;
 import org.eclipse.edc.spi.result.ServiceResult;
 
 /**
- * Base class for all protocol service implementation. This will contain common logic such as validating the JWT token
- * and extracting the {@link ClaimToken}
+ * Base class for all protocol service implementation. This will contain common
+ * logic such as validating the JWT token and extracting the {@link ClaimToken}
  */
 public abstract class BaseProtocolService {
 
-    private final IdentityService identityService;
+  private final IdentityService identityService;
 
-    private final Monitor monitor;
+  private final Monitor monitor;
 
-    protected BaseProtocolService(IdentityService identityService, Monitor monitor) {
-        this.identityService = identityService;
-        this.monitor = monitor;
+  protected BaseProtocolService(IdentityService identityService,
+                                Monitor monitor) {
+    this.identityService = identityService;
+    this.monitor = monitor;
+  }
+
+  /**
+   * Validate and extract the {@link ClaimToken} from the input {@link
+   * TokenRepresentation} by using the {@link IdentityService}
+   *
+   * @param tokenRepresentation The input {@link TokenRepresentation}
+   * @return The {@link ClaimToken} if success, failure otherwise
+   */
+  public ServiceResult<ClaimToken>
+  verifyToken(TokenRepresentation tokenRepresentation) {
+    // TODO: since we are pushing here the invocation of the IdentityService we
+    // don't know the audience here
+    //  The audience removal will be tackle next. IdentityService that relies on
+    //  this parameter would not work for the time being.
+
+    // TODO: policy extractors will be handled next
+    var verificationContext = VerificationContext.Builder.newInstance()
+                                  .policy(Policy.Builder.newInstance().build())
+                                  .build();
+
+    var result = identityService.verifyJwtToken(tokenRepresentation,
+                                                verificationContext);
+
+    if (result.failed()) {
+      monitor.debug(
+          () -> "Unauthorized: %s".formatted(result.getFailureDetail()));
+      return ServiceResult.unauthorized("Unauthorized");
     }
-
-    /**
-     * Validate and extract the {@link ClaimToken} from the input {@link TokenRepresentation} by using the {@link IdentityService}
-     *
-     * @param tokenRepresentation The input {@link TokenRepresentation}
-     * @return The {@link ClaimToken} if success, failure otherwise
-     */
-    public ServiceResult<ClaimToken> verifyToken(TokenRepresentation tokenRepresentation) {
-        // TODO: since we are pushing here the invocation of the IdentityService we don't know the audience here
-        //  The audience removal will be tackle next. IdentityService that relies on this parameter would not work
-        //  for the time being.
-
-        // TODO: policy extractors will be handled next
-        var verificationContext = VerificationContext.Builder.newInstance()
-                .policy(Policy.Builder.newInstance().build())
-                .build();
-
-        var result = identityService.verifyJwtToken(tokenRepresentation, verificationContext);
-
-        if (result.failed()) {
-            monitor.debug(() -> "Unauthorized: %s".formatted(result.getFailureDetail()));
-            return ServiceResult.unauthorized("Unauthorized");
-        }
-        return ServiceResult.success(result.getContent());
-    }
+    return ServiceResult.success(result.getContent());
+  }
 }

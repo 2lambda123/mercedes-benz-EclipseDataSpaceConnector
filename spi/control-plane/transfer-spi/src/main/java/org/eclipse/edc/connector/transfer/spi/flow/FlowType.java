@@ -8,16 +8,15 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.connector.transfer.spi.flow;
 
 /**
- * Data Flow types, generally they can be Push (provider pushing data to the consumer) and Pull (consumer pulling data
- * from the provider)
+ * Data Flow types, generally they can be Push (provider pushing data to the
+ * consumer) and Pull (consumer pulling data from the provider)
  */
-public enum FlowType {
-    PUSH, PULL
-}
+public enum FlowType { PUSH, PULL }

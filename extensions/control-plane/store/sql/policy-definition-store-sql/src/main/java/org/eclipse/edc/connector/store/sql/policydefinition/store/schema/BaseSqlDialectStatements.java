@@ -20,54 +20,53 @@ import org.eclipse.edc.sql.translation.SqlQueryStatement;
 
 public class BaseSqlDialectStatements implements SqlPolicyStoreStatements {
 
-    @Override
-    public String getSelectTemplate() {
-        return String.format("SELECT * FROM %s",
-                getPolicyTable());
-    }
+  @Override
+  public String getSelectTemplate() {
+    return String.format("SELECT * FROM %s", getPolicyTable());
+  }
 
-    @Override
-    public String getInsertTemplate() {
-        return executeStatement()
-                .column(getPolicyIdColumn())
-                .jsonColumn(getPermissionsColumn())
-                .jsonColumn(getProhibitionsColumn())
-                .jsonColumn(getDutiesColumn())
-                .jsonColumn(getExtensiblePropertiesColumn())
-                .column(getInheritsFromColumn())
-                .column(getAssignerColumn())
-                .column(getAssigneeColumn())
-                .column(getTargetColumn())
-                .column(getTypeColumn())
-                .column(getCreatedAtColumn())
-                .jsonColumn(getPrivatePropertiesColumn())
-                .insertInto(getPolicyTable());
-    }
+  @Override
+  public String getInsertTemplate() {
+    return executeStatement()
+        .column(getPolicyIdColumn())
+        .jsonColumn(getPermissionsColumn())
+        .jsonColumn(getProhibitionsColumn())
+        .jsonColumn(getDutiesColumn())
+        .jsonColumn(getExtensiblePropertiesColumn())
+        .column(getInheritsFromColumn())
+        .column(getAssignerColumn())
+        .column(getAssigneeColumn())
+        .column(getTargetColumn())
+        .column(getTypeColumn())
+        .column(getCreatedAtColumn())
+        .jsonColumn(getPrivatePropertiesColumn())
+        .insertInto(getPolicyTable());
+  }
 
-    @Override
-    public String getUpdateTemplate() {
-        return executeStatement()
-                .jsonColumn(getPermissionsColumn())
-                .jsonColumn(getProhibitionsColumn())
-                .jsonColumn(getDutiesColumn())
-                .jsonColumn(getExtensiblePropertiesColumn())
-                .column(getInheritsFromColumn())
-                .column(getAssignerColumn())
-                .column(getAssigneeColumn())
-                .column(getTargetColumn())
-                .column(getTypeColumn())
-                .jsonColumn(getPrivatePropertiesColumn())
-                .update(getPolicyTable(), getPolicyIdColumn());
+  @Override
+  public String getUpdateTemplate() {
+    return executeStatement()
+        .jsonColumn(getPermissionsColumn())
+        .jsonColumn(getProhibitionsColumn())
+        .jsonColumn(getDutiesColumn())
+        .jsonColumn(getExtensiblePropertiesColumn())
+        .column(getInheritsFromColumn())
+        .column(getAssignerColumn())
+        .column(getAssigneeColumn())
+        .column(getTargetColumn())
+        .column(getTypeColumn())
+        .jsonColumn(getPrivatePropertiesColumn())
+        .update(getPolicyTable(), getPolicyIdColumn());
+  }
 
-    }
+  @Override
+  public String getDeleteTemplate() {
+    return executeStatement().delete(getPolicyTable(), getPolicyIdColumn());
+  }
 
-    @Override
-    public String getDeleteTemplate() {
-        return executeStatement().delete(getPolicyTable(), getPolicyIdColumn());
-    }
-
-    @Override
-    public SqlQueryStatement createQuery(QuerySpec querySpec) {
-        return new SqlQueryStatement(getSelectTemplate(), querySpec, new PolicyDefinitionMapping(this));
-    }
+  @Override
+  public SqlQueryStatement createQuery(QuerySpec querySpec) {
+    return new SqlQueryStatement(getSelectTemplate(), querySpec,
+                                 new PolicyDefinitionMapping(this));
+  }
 }

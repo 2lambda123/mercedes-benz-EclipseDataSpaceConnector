@@ -14,6 +14,15 @@
 
 package org.eclipse.edc.connector.transfer.dataplane.flow;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.eclipse.edc.connector.transfer.dataplane.spi.TransferDataPlaneConstants.HTTP_PROXY;
+import static org.eclipse.edc.junit.assertions.AbstractResultAssert.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.UUID;
 import org.eclipse.edc.connector.dataplane.selector.spi.DataPlaneSelectorService;
 import org.eclipse.edc.connector.dataplane.selector.spi.instance.DataPlaneInstance;
 import org.eclipse.edc.connector.transfer.dataplane.proxy.ConsumerPullDataPlaneProxyResolver;
@@ -26,119 +35,135 @@ import org.eclipse.edc.spi.types.domain.DataAddress;
 import org.eclipse.edc.spi.types.domain.asset.Asset;
 import org.junit.jupiter.api.Test;
 
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.eclipse.edc.connector.transfer.dataplane.spi.TransferDataPlaneConstants.HTTP_PROXY;
-import static org.eclipse.edc.junit.assertions.AbstractResultAssert.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 class ConsumerPullTransferDataFlowControllerTest {
 
-    private final DataPlaneSelectorService selectorService = mock();
-    private final ConsumerPullDataPlaneProxyResolver resolver = mock();
+  private final DataPlaneSelectorService selectorService = mock();
+  private final ConsumerPullDataPlaneProxyResolver resolver = mock();
 
-    private final ConsumerPullTransferDataFlowController flowController = new ConsumerPullTransferDataFlowController(selectorService, resolver);
+  private final ConsumerPullTransferDataFlowController flowController =
+      new ConsumerPullTransferDataFlowController(selectorService, resolver);
 
-    @Test
-    void verifyCanHandle() {
-        assertThat(flowController.canHandle(transferProcess(HTTP_PROXY))).isTrue();
-        assertThat(flowController.canHandle(transferProcess("not-http-proxy"))).isFalse();
-    }
+  @Test
+  void verifyCanHandle() {
+    assertThat(flowController.canHandle(transferProcess(HTTP_PROXY))).isTrue();
+    assertThat(flowController.canHandle(transferProcess("not-http-proxy")))
+        .isFalse();
+  }
 
-    @Test
-    void initiateFlow_success() {
-        var proxyAddress = dataAddress();
-        var instance = mock(DataPlaneInstance.class);
-        var transferProcess = TransferProcess.Builder.newInstance()
-                .dataRequest(dataRequest())
-                .contentDataAddress(dataAddress())
-                .build();
+  @Test
+  void initiateFlow_success() {
+    var proxyAddress = dataAddress();
+    var instance = mock(DataPlaneInstance.class);
+    var transferProcess = TransferProcess.Builder.newInstance()
+                              .dataRequest(dataRequest())
+                              .contentDataAddress(dataAddress())
+                              .build();
 
-        when(selectorService.select(any(), argThat(destination -> destination.getType().equals(HTTP_PROXY)))).thenReturn(instance);
-        when(resolver.toDataAddress(any(), any(), any())).thenReturn(Result.success(proxyAddress));
+    when(selectorService.select(
+             any(),
+             argThat(destination -> destination.getType().equals(HTTP_PROXY))))
+        .thenReturn(instance);
+    when(resolver.toDataAddress(any(), any(), any()))
+        .thenReturn(Result.success(proxyAddress));
 
-        var result = flowController.initiateFlow(transferProcess, null);
+    var result = flowController.initiateFlow(transferProcess, null);
 
-        assertThat(result).isSucceeded().satisfies(response -> {
-            assertThat(response.getDataAddress()).isEqualTo(proxyAddress);
-        });
-    }
+    assertThat(result).isSucceeded().satisfies(response -> {
+      assertThat(response.getDataAddress()).isEqualTo(proxyAddress);
+    });
+  }
 
-    @Test
-    void initiateFlow_returnsFailureIfNoDataPlaneInstance() {
-        var transferProcess = TransferProcess.Builder.newInstance()
-                .dataRequest(dataRequest())
-                .contentDataAddress(dataAddress())
-                .build();
+  @Test
+  void initiateFlow_returnsFailureIfNoDataPlaneInstance() {
+    var transferProcess = TransferProcess.Builder.newInstance()
+                              .dataRequest(dataRequest())
+                              .contentDataAddress(dataAddress())
+                              .build();
 
-        var result = flowController.initiateFlow(transferProcess, null);
+    var result = flowController.initiateFlow(transferProcess, null);
 
+    assertThat(result)
+        .isFailed()
+        .extracting(Failure::getFailureDetail)
+        .asString()
+        .isEqualTo(String.format(
+            "Failed to find DataPlaneInstance for source/destination: %s/%s",
+            transferProcess.getContentDataAddress().getType(), HTTP_PROXY));
+  }
 
-        assertThat(result).isFailed().extracting(Failure::getFailureDetail).asString()
-                .isEqualTo(String.format("Failed to find DataPlaneInstance for source/destination: %s/%s", transferProcess.getContentDataAddress().getType(), HTTP_PROXY));
-    }
+  @Test
+  void initiateFlow_returnsFailureIfAddressResolutionFails() {
+    var errorMsg = "Test Error Message";
+    var instance = mock(DataPlaneInstance.class);
+    var transferProcess = TransferProcess.Builder.newInstance()
+                              .dataRequest(dataRequest())
+                              .contentDataAddress(dataAddress())
+                              .build();
 
-    @Test
-    void initiateFlow_returnsFailureIfAddressResolutionFails() {
-        var errorMsg = "Test Error Message";
-        var instance = mock(DataPlaneInstance.class);
-        var transferProcess = TransferProcess.Builder.newInstance()
-                .dataRequest(dataRequest())
-                .contentDataAddress(dataAddress())
-                .build();
+    when(selectorService.select(
+             any(),
+             argThat(destination -> destination.getType().equals(HTTP_PROXY))))
+        .thenReturn(instance);
+    when(resolver.toDataAddress(any(), any(), any()))
+        .thenReturn(Result.failure(errorMsg));
 
-        when(selectorService.select(any(), argThat(destination -> destination.getType().equals(HTTP_PROXY)))).thenReturn(instance);
-        when(resolver.toDataAddress(any(), any(), any())).thenReturn(Result.failure(errorMsg));
+    var result = flowController.initiateFlow(
+        transferProcess, Policy.Builder.newInstance().build());
 
-        var result = flowController.initiateFlow(transferProcess, Policy.Builder.newInstance().build());
+    assertThat(result)
+        .isFailed()
+        .extracting(Failure::getFailureDetail)
+        .asString()
+        .contains(errorMsg);
+  }
 
-        assertThat(result).isFailed().extracting(Failure::getFailureDetail).asString().contains(errorMsg);
-    }
+  @Test
+  void terminate_shouldAlwaysReturnSuccess() {
+    var transferProcess = TransferProcess.Builder.newInstance()
+                              .dataRequest(dataRequest())
+                              .contentDataAddress(dataAddress())
+                              .build();
 
-    @Test
-    void terminate_shouldAlwaysReturnSuccess() {
-        var transferProcess = TransferProcess.Builder.newInstance()
-                .dataRequest(dataRequest())
-                .contentDataAddress(dataAddress())
-                .build();
+    var result = flowController.terminate(transferProcess);
 
-        var result = flowController.terminate(transferProcess);
+    assertThat(result).isSucceeded();
+  }
 
-        assertThat(result).isSucceeded();
-    }
+  @Test
+  void transferTypes_shouldReturnHttpPull() {
+    var asset =
+        Asset.Builder.newInstance()
+            .dataAddress(DataAddress.Builder.newInstance().type("any").build())
+            .build();
 
-    @Test
-    void transferTypes_shouldReturnHttpPull() {
-        var asset = Asset.Builder.newInstance().dataAddress(DataAddress.Builder.newInstance().type("any").build()).build();
+    var transferTypes = flowController.transferTypesFor(asset);
 
-        var transferTypes = flowController.transferTypesFor(asset);
+    assertThat(transferTypes).hasSize(1).contains("Http-PULL");
+  }
 
-        assertThat(transferTypes).hasSize(1).contains("Http-PULL");
-    }
+  private TransferProcess transferProcess(String destinationType) {
+    return TransferProcess.Builder.newInstance()
+        .dataRequest(DataRequest.Builder.newInstance()
+                         .destinationType(destinationType)
+                         .build())
+        .build();
+  }
 
-    private TransferProcess transferProcess(String destinationType) {
-        return TransferProcess.Builder.newInstance()
-                .dataRequest(DataRequest.Builder.newInstance().destinationType(destinationType).build())
-                .build();
-    }
+  private DataAddress dataAddress() {
+    return DataAddress.Builder.newInstance()
+        .type(UUID.randomUUID().toString())
+        .build();
+  }
 
-    private DataAddress dataAddress() {
-        return DataAddress.Builder.newInstance().type(UUID.randomUUID().toString()).build();
-    }
-
-    private DataRequest dataRequest() {
-        return DataRequest.Builder.newInstance()
-                .id(UUID.randomUUID().toString())
-                .protocol("protocol")
-                .contractId(UUID.randomUUID().toString())
-                .assetId(UUID.randomUUID().toString())
-                .connectorAddress("test.connector.address")
-                .processId(UUID.randomUUID().toString())
-                .destinationType(HTTP_PROXY)
-                .build();
-    }
+  private DataRequest dataRequest() {
+    return DataRequest.Builder.newInstance()
+        .id(UUID.randomUUID().toString())
+        .protocol("protocol")
+        .contractId(UUID.randomUUID().toString())
+        .assetId(UUID.randomUUID().toString())
+        .connectorAddress("test.connector.address")
+        .processId(UUID.randomUUID().toString())
+        .destinationType(HTTP_PROXY)
+        .build();
+  }
 }

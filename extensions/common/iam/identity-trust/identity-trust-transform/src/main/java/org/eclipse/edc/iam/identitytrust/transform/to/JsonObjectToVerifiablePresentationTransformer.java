@@ -8,7 +8,8 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
@@ -25,23 +26,32 @@ import org.eclipse.edc.transform.spi.TransformerContext;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class JsonObjectToVerifiablePresentationTransformer extends AbstractJsonLdTransformer<JsonObject, VerifiablePresentation> {
-    public JsonObjectToVerifiablePresentationTransformer() {
-        super(JsonObject.class, VerifiablePresentation.class);
-    }
+public class JsonObjectToVerifiablePresentationTransformer
+    extends AbstractJsonLdTransformer<JsonObject, VerifiablePresentation> {
+  public JsonObjectToVerifiablePresentationTransformer() {
+    super(JsonObject.class, VerifiablePresentation.class);
+  }
 
-    @Override
-    public @Nullable VerifiablePresentation transform(@NotNull JsonObject jsonObject, @NotNull TransformerContext context) {
-        var vcBuilder = VerifiablePresentation.Builder.newInstance();
-        vcBuilder.id(nodeId(jsonObject));
-        transformArrayOrObject(jsonObject.get(JsonLdKeywords.TYPE), Object.class, o -> vcBuilder.type(o.toString()), context);
+  @Override
+  public @Nullable
+  VerifiablePresentation transform(@NotNull JsonObject jsonObject,
+                                   @NotNull TransformerContext context) {
+    var vcBuilder = VerifiablePresentation.Builder.newInstance();
+    vcBuilder.id(nodeId(jsonObject));
+    transformArrayOrObject(jsonObject.get(JsonLdKeywords.TYPE), Object.class,
+                           o -> vcBuilder.type(o.toString()), context);
 
-        visitProperties(jsonObject, (s, jsonValue) -> transformProperties(s, jsonValue, vcBuilder, context));
-        return vcBuilder.build();
-    }
+    visitProperties(
+        jsonObject,
+        (s,
+         jsonValue) -> transformProperties(s, jsonValue, vcBuilder, context));
+    return vcBuilder.build();
+  }
 
-    private void transformProperties(String key, JsonValue jsonValue, VerifiablePresentation.Builder vpBuilder, TransformerContext context) {
-        switch (key) {
+  private void transformProperties(String key, JsonValue jsonValue,
+                                   VerifiablePresentation.Builder vpBuilder,
+                                   TransformerContext context) {
+    switch (key) {
             case VerifiablePresentation.VERIFIABLE_PRESENTATION_HOLDER_PROPERTY ->
                     vpBuilder.holder(transformString(jsonValue, context));
             case VerifiablePresentation.VERIFIABLE_PRESENTATION_VC_PROPERTY ->

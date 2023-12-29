@@ -26,24 +26,28 @@ import java.util.stream.Stream;
 @FunctionalInterface
 public interface QueryResolver<T> {
 
-    /**
-     * Method to query a stream by provided specification.
-     *
-     * @param stream stream to be queried.
-     * @param spec   query specification.
-     * @return stream result from queries.
-     */
-    default Stream<T> query(Stream<T> stream, QuerySpec spec) {
-        return query(stream, spec, Predicate::and, x -> true);
-    }
+  /**
+   * Method to query a stream by provided specification.
+   *
+   * @param stream stream to be queried.
+   * @param spec   query specification.
+   * @return stream result from queries.
+   */
+  default Stream<T> query(Stream<T> stream, QuerySpec spec) {
+    return query(stream, spec, Predicate::and, x -> true);
+  }
 
-    /**
-     * Method to query a stream by provided specification, using the provided accumulator
-     *
-     * @param stream      stream to be queried.
-     * @param spec        query specification.
-     * @param accumulator binary accumulation operator, e.g. Predicate::and, Predicate::or, etc.
-     * @return stream result from queries.
-     */
-    Stream<T> query(Stream<T> stream, QuerySpec spec, BinaryOperator<Predicate<Object>> accumulator, Predicate<Object> fallback);
+  /**
+   * Method to query a stream by provided specification, using the provided
+   * accumulator
+   *
+   * @param stream      stream to be queried.
+   * @param spec        query specification.
+   * @param accumulator binary accumulation operator, e.g. Predicate::and,
+   *     Predicate::or, etc.
+   * @return stream result from queries.
+   */
+  Stream<T> query(Stream<T> stream, QuerySpec spec,
+                  BinaryOperator<Predicate<Object>> accumulator,
+                  Predicate<Object> fallback);
 }

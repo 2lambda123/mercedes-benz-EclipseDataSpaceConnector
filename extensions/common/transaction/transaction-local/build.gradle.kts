@@ -25,5 +25,3 @@ dependencies {
     testImplementation(project(":core:common:junit"))
     testImplementation(testFixtures(project(":extensions:common:sql:sql-core")))
 }
-
-

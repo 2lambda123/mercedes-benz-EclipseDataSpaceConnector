@@ -8,48 +8,50 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.spi.iam;
 
-import org.eclipse.edc.policy.model.Policy;
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
+import org.eclipse.edc.policy.model.Policy;
+import org.junit.jupiter.api.Test;
+
 public class VerificationContextTest {
 
-    @Test
-    void assertMandatoryPolicy() {
-        assertThatNullPointerException().isThrownBy(() -> VerificationContext.Builder.newInstance()
-                        .build())
-                .withMessageContaining("Policy");
-    }
+  @Test
+  void assertMandatoryPolicy() {
+    assertThatNullPointerException()
+        .isThrownBy(() -> VerificationContext.Builder.newInstance().build())
+        .withMessageContaining("Policy");
+  }
 
-    @Test
-    void buildVerificationContext() {
-        assertThatNoException().isThrownBy(() -> VerificationContext.Builder.newInstance()
-                .policy(Policy.Builder.newInstance().build())
-                .build());
-    }
+  @Test
+  void buildVerificationContext() {
+    assertThatNoException().isThrownBy(
+        ()
+            -> VerificationContext.Builder.newInstance()
+                   .policy(Policy.Builder.newInstance().build())
+                   .build());
+  }
 
-    @Test
-    void buildVerificationContext_withAdditionalData() {
+  @Test
+  void buildVerificationContext_withAdditionalData() {
 
-        var data = new TestData();
+    var data = new TestData();
 
-        var context = VerificationContext.Builder.newInstance()
-                .policy(Policy.Builder.newInstance().build())
-                .data(TestData.class, data)
-                .build();
+    var context = VerificationContext.Builder.newInstance()
+                      .policy(Policy.Builder.newInstance().build())
+                      .data(TestData.class, data)
+                      .build();
 
-        assertThat(context.getContextData(TestData.class)).isEqualTo(data);
-    }
+    assertThat(context.getContextData(TestData.class)).isEqualTo(data);
+  }
 
-    private static class TestData {
-    }
+  private static class TestData {}
 }

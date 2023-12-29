@@ -9,8 +9,9 @@
  *
  *  Contributors:
  *       Microsoft Corporation - initial API and implementation
- *       Fraunhofer Institute for Software and Systems Engineering - Improvements
- *       Microsoft Corporation - Use IDS Webhook address for JWT audience claim
+ *       Fraunhofer Institute for Software and Systems Engineering -
+ * Improvements Microsoft Corporation - Use IDS Webhook address for JWT audience
+ * claim
  *
  */
 
@@ -27,38 +28,44 @@ import org.eclipse.edc.spi.result.Result;
 @ExtensionPoint
 public interface IdentityService {
 
-    /**
-     * Obtains a client token encoded as a JWT.
-     *
-     * @param parameters parameter object defining the token properties.
-     * @return generated client token.
-     */
-    Result<TokenRepresentation> obtainClientCredentials(TokenParameters parameters);
+  /**
+   * Obtains a client token encoded as a JWT.
+   *
+   * @param parameters parameter object defining the token properties.
+   * @return generated client token.
+   */
+  Result<TokenRepresentation>
+  obtainClientCredentials(TokenParameters parameters);
 
-    /**
-     * Verifies a JWT bearer token.
-     *
-     * @param tokenRepresentation A token representation including the token to verify.
-     * @param context             The {@link  VerificationContext}.
-     * @return Result of the validation.
-     */
-    Result<ClaimToken> verifyJwtToken(TokenRepresentation tokenRepresentation, VerificationContext context);
+  /**
+   * Verifies a JWT bearer token.
+   *
+   * @param tokenRepresentation A token representation including the token to
+   *     verify.
+   * @param context             The {@link  VerificationContext}.
+   * @return Result of the validation.
+   */
+  Result<ClaimToken> verifyJwtToken(TokenRepresentation tokenRepresentation,
+                                    VerificationContext context);
 
-    /**
-     * Verifies a JWT bearer token.
-     *
-     * @param tokenRepresentation A token representation including the token to verify.
-     * @param audience            The audience.
-     * @return Result of the validation.
-     * @deprecated please use {@link #verifyJwtToken(TokenRepresentation, VerificationContext)}
-     */
+  /**
+   * Verifies a JWT bearer token.
+   *
+   * @param tokenRepresentation A token representation including the token to
+   *     verify.
+   * @param audience            The audience.
+   * @return Result of the validation.
+   * @deprecated please use {@link #verifyJwtToken(TokenRepresentation,
+   *     VerificationContext)}
+   */
 
-    @Deprecated(since = "0.4.2", forRemoval = true)
-    default Result<ClaimToken> verifyJwtToken(TokenRepresentation tokenRepresentation, String audience) {
-        var context = VerificationContext.Builder.newInstance()
-                .audience(audience)
-                .policy(Policy.Builder.newInstance().build())
-                .build();
-        return verifyJwtToken(tokenRepresentation, context);
-    }
+  @Deprecated(since = "0.4.2", forRemoval = true)
+  default Result<ClaimToken>
+  verifyJwtToken(TokenRepresentation tokenRepresentation, String audience) {
+    var context = VerificationContext.Builder.newInstance()
+                      .audience(audience)
+                      .policy(Policy.Builder.newInstance().build())
+                      .build();
+    return verifyJwtToken(tokenRepresentation, context);
+  }
 }

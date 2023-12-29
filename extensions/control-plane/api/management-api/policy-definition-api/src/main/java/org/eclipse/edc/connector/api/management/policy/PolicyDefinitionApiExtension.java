@@ -14,7 +14,11 @@
 
 package org.eclipse.edc.connector.api.management.policy;
 
+import static org.eclipse.edc.connector.policy.spi.PolicyDefinition.EDC_POLICY_DEFINITION_TYPE;
+import static org.eclipse.edc.spi.CoreConstants.JSON_LD;
+
 import jakarta.json.Json;
+import java.util.Map;
 import org.eclipse.edc.connector.api.management.configuration.ManagementApiConfiguration;
 import org.eclipse.edc.connector.api.management.policy.transform.JsonObjectFromPolicyDefinitionTransformer;
 import org.eclipse.edc.connector.api.management.policy.transform.JsonObjectToPolicyDefinitionTransformer;
@@ -29,50 +33,43 @@ import org.eclipse.edc.transform.spi.TypeTransformerRegistry;
 import org.eclipse.edc.validator.spi.JsonObjectValidatorRegistry;
 import org.eclipse.edc.web.spi.WebService;
 
-import java.util.Map;
-
-import static org.eclipse.edc.connector.policy.spi.PolicyDefinition.EDC_POLICY_DEFINITION_TYPE;
-import static org.eclipse.edc.spi.CoreConstants.JSON_LD;
-
-
 @Extension(value = PolicyDefinitionApiExtension.NAME)
 public class PolicyDefinitionApiExtension implements ServiceExtension {
 
-    public static final String NAME = "Management API: Policy Definition";
+  public static final String NAME = "Management API: Policy Definition";
 
-    @Inject
-    private TypeTransformerRegistry transformerRegistry;
+  @Inject private TypeTransformerRegistry transformerRegistry;
 
-    @Inject
-    private WebService webService;
+  @Inject private WebService webService;
 
-    @Inject
-    private ManagementApiConfiguration configuration;
+  @Inject private ManagementApiConfiguration configuration;
 
-    @Inject
-    private PolicyDefinitionService service;
+  @Inject private PolicyDefinitionService service;
 
-    @Inject
-    private JsonObjectValidatorRegistry validatorRegistry;
+  @Inject private JsonObjectValidatorRegistry validatorRegistry;
 
-    @Inject
-    private TypeManager typeManager;
+  @Inject private TypeManager typeManager;
 
-    @Override
-    public String name() {
-        return NAME;
-    }
+  @Override
+  public String name() {
+    return NAME;
+  }
 
-    @Override
-    public void initialize(ServiceExtensionContext context) {
-        var jsonBuilderFactory = Json.createBuilderFactory(Map.of());
-        transformerRegistry.register(new JsonObjectToPolicyDefinitionTransformer());
-        var mapper = typeManager.getMapper(JSON_LD);
-        transformerRegistry.register(new JsonObjectFromPolicyDefinitionTransformer(jsonBuilderFactory, mapper));
+  @Override
+  public void initialize(ServiceExtensionContext context) {
+    var jsonBuilderFactory = Json.createBuilderFactory(Map.of());
+    transformerRegistry.register(new JsonObjectToPolicyDefinitionTransformer());
+    var mapper = typeManager.getMapper(JSON_LD);
+    transformerRegistry.register(new JsonObjectFromPolicyDefinitionTransformer(
+        jsonBuilderFactory, mapper));
 
-        validatorRegistry.register(EDC_POLICY_DEFINITION_TYPE, PolicyDefinitionValidator.instance());
+    validatorRegistry.register(EDC_POLICY_DEFINITION_TYPE,
+                               PolicyDefinitionValidator.instance());
 
-        var monitor = context.getMonitor();
-        webService.registerResource(configuration.getContextAlias(), new PolicyDefinitionApiController(monitor, transformerRegistry, service, validatorRegistry));
-    }
+    var monitor = context.getMonitor();
+    webService.registerResource(
+        configuration.getContextAlias(),
+        new PolicyDefinitionApiController(monitor, transformerRegistry, service,
+                                          validatorRegistry));
+  }
 }

@@ -8,12 +8,18 @@
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Contributors:
- *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and implementation
+ *       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - initial API and
+ * implementation
  *
  */
 
 package org.eclipse.edc.connector.service.contractnegotiation;
 
+import static java.lang.String.format;
+import static java.util.Optional.ofNullable;
+
+import java.util.List;
+import java.util.Optional;
 import org.eclipse.edc.connector.contract.spi.negotiation.ConsumerContractNegotiationManager;
 import org.eclipse.edc.connector.contract.spi.negotiation.store.ContractNegotiationStore;
 import org.eclipse.edc.connector.contract.spi.types.command.TerminateNegotiationCommand;
@@ -28,75 +34,81 @@ import org.eclipse.edc.spi.result.ServiceResult;
 import org.eclipse.edc.spi.types.domain.agreement.ContractAgreement;
 import org.eclipse.edc.transaction.spi.TransactionContext;
 
-import java.util.List;
-import java.util.Optional;
+public class ContractNegotiationServiceImpl
+    implements ContractNegotiationService {
 
-import static java.lang.String.format;
-import static java.util.Optional.ofNullable;
+  private final ContractNegotiationStore store;
+  private final ConsumerContractNegotiationManager consumerManager;
+  private final TransactionContext transactionContext;
+  private final CommandHandlerRegistry commandHandlerRegistry;
+  private final QueryValidator queryValidator;
 
-public class ContractNegotiationServiceImpl implements ContractNegotiationService {
+  public ContractNegotiationServiceImpl(
+      ContractNegotiationStore store,
+      ConsumerContractNegotiationManager consumerManager,
+      TransactionContext transactionContext,
+      CommandHandlerRegistry commandHandlerRegistry) {
+    this.store = store;
+    this.consumerManager = consumerManager;
+    this.transactionContext = transactionContext;
+    this.commandHandlerRegistry = commandHandlerRegistry;
+    queryValidator = new QueryValidator(ContractNegotiation.class);
+  }
 
-    private final ContractNegotiationStore store;
-    private final ConsumerContractNegotiationManager consumerManager;
-    private final TransactionContext transactionContext;
-    private final CommandHandlerRegistry commandHandlerRegistry;
-    private final QueryValidator queryValidator;
+  @Override
+  public ContractNegotiation findbyId(String contractNegotiationId) {
+    return transactionContext.execute(
+        () -> store.findById(contractNegotiationId));
+  }
 
-    public ContractNegotiationServiceImpl(ContractNegotiationStore store, ConsumerContractNegotiationManager consumerManager,
-                                          TransactionContext transactionContext, CommandHandlerRegistry commandHandlerRegistry) {
-        this.store = store;
-        this.consumerManager = consumerManager;
-        this.transactionContext = transactionContext;
-        this.commandHandlerRegistry = commandHandlerRegistry;
-        queryValidator = new QueryValidator(ContractNegotiation.class);
-    }
+  @Override
+  public ServiceResult<List<ContractNegotiation>> search(QuerySpec query) {
+    return queryValidator.validate(query).flatMap(
+        validation
+        -> validation.failed()
+               ? ServiceResult.badRequest(format("Error validating schema: %s",
+                                                 validation.getFailureDetail()))
+               : ServiceResult.success(queryNegotiations(query)));
+  }
 
-    @Override
-    public ContractNegotiation findbyId(String contractNegotiationId) {
-        return transactionContext.execute(() -> store.findById(contractNegotiationId));
-    }
+  @Override
+  public String getState(String negotiationId) {
+    return Optional.of(negotiationId)
+        .map(this::findbyId)
+        .map(ContractNegotiation::getState)
+        .map(ContractNegotiationStates::from)
+        .map(Enum::name)
+        .orElse(null);
+  }
 
-    @Override
-    public ServiceResult<List<ContractNegotiation>> search(QuerySpec query) {
-        return queryValidator.validate(query)
-                .flatMap(validation -> validation.failed()
-                        ? ServiceResult.badRequest(format("Error validating schema: %s", validation.getFailureDetail()))
-                        : ServiceResult.success(queryNegotiations(query))
-                );
-    }
+  @Override
+  public ContractAgreement getForNegotiation(String negotiationId) {
+    return transactionContext.execute(
+        ()
+            -> ofNullable(store.findById(negotiationId))
+                   .map(ContractNegotiation::getContractAgreement)
+                   .orElse(null));
+  }
 
-    @Override
-    public String getState(String negotiationId) {
-        return Optional.of(negotiationId)
-                .map(this::findbyId)
-                .map(ContractNegotiation::getState)
-                .map(ContractNegotiationStates::from)
-                .map(Enum::name)
-                .orElse(null);
-    }
+  @Override
+  public ContractNegotiation initiateNegotiation(ContractRequest request) {
+    return transactionContext.execute(
+        () -> consumerManager.initiate(request).getContent());
+  }
 
-    @Override
-    public ContractAgreement getForNegotiation(String negotiationId) {
-        return transactionContext.execute(() -> ofNullable(store.findById(negotiationId))
-                .map(ContractNegotiation::getContractAgreement).orElse(null));
-    }
+  @Override
+  public ServiceResult<Void> terminate(TerminateNegotiationCommand command) {
+    return transactionContext.execute(
+        ()
+            -> commandHandlerRegistry.execute(command).flatMap(
+                ServiceResult::from));
+  }
 
-    @Override
-    public ContractNegotiation initiateNegotiation(ContractRequest request) {
-        return transactionContext.execute(() -> consumerManager.initiate(request).getContent());
-    }
-
-    @Override
-    public ServiceResult<Void> terminate(TerminateNegotiationCommand command) {
-        return transactionContext.execute(() -> commandHandlerRegistry.execute(command).flatMap(ServiceResult::from));
-    }
-
-    private List<ContractNegotiation> queryNegotiations(QuerySpec query) {
-        return transactionContext.execute(() -> {
-            try (var stream = store.queryNegotiations(query)) {
-                return stream.toList();
-            }
-        });
-    }
-
+  private List<ContractNegotiation> queryNegotiations(QuerySpec query) {
+    return transactionContext.execute(() -> {
+      try (var stream = store.queryNegotiations(query)) {
+        return stream.toList();
+      }
+    });
+  }
 }
